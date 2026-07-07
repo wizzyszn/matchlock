@@ -1,0 +1,26 @@
+skip_local_validator = true
+
+[workspace]
+members = ["programs/blockchain"]
+exclude = ["programs/txline-mock"]
+
+[toolchain]
+
+[features]
+resolution = true
+skip-lint = false
+
+[programs.localnet]
+blockchain = "Ak6UgR39nvhxHjLCEkMg18NprbchYgoabvbMigkRCbbi"
+
+[programs.devnet]
+blockchain = "Ak6UgR39nvhxHjLCEkMg18NprbchYgoabvbMigkRCbbi"
+
+[provider]
+cluster = "devnet"
+wallet = "../backend-go/keys/keeper.json"
+
+[scripts]
+test = "bash -c 'test -f target/deploy/txline_mock.so || cargo build-sbf --manifest-path programs/txline-mock/Cargo.toml -o ../../target/deploy'"
+
+[hooks]

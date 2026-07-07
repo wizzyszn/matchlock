@@ -1,0 +1,180 @@
+<!DOCTYPE html>
+<html lang="en" class="scroll-smooth">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Matchlock — Challenge. Settle on-chain.</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700&amp;family=Garamond:wght@400;700;italic&amp;display=swap" rel="stylesheet">
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700&family=Garamond:wght@400;700;italic&display=swap');
+    body { font-family: 'Manrope', system-ui, sans-serif; }
+    .garamond { font-family: 'Garamond', serif; }
+    .hero-bg { background-image: linear-gradient(87deg, #e64040, #e66140); }
+  </style>
+</head>
+<body class="bg-[#282828] text-white">
+
+  <!-- NAV -->
+  <nav class="fixed top-8 left-1/2 -translate-x-1/2 bg-[#2c2c2c] border border-[#373737] rounded-[100px] py-4 px-10 flex items-center justify-between w-[1282px] z-50">
+    <div class="flex items-center gap-3">
+      <img src="https://www.figma.com/api/mcp/asset/26f120ee-24c8-4fd2-bebb-e69291b39634" alt="" class="h-8">
+      <span class="garamond text-3xl font-bold">Matchlock</span>
+    </div>
+    <div class="flex gap-8 text-sm font-medium">
+      <a href="#" class="text-[#e64040] font-semibold">Home</a>
+      <a href="#workflow" class="hover:text-white transition-colors">How it Works</a>
+      <a href="#advantage" class="hover:text-white transition-colors">The Advantage</a>
+      <a href="#roadmap" class="hover:text-white transition-colors">Protocol Roadmap</a>
+    </div>
+    <div class="flex items-center gap-4">
+      <button class="px-8 py-3 rounded-full border border-white/30 hover:bg-white/5 transition">Login</button>
+      <button class="px-8 py-3 bg-gradient-to-r from-[#e64040] to-[#e66140] rounded-full font-medium">Enter Matchlock</button>
+    </div>
+  </nav>
+
+  <!-- HERO -->
+  <section class="relative min-h-screen flex items-center justify-center overflow-hidden pt-20">
+    <div class="absolute inset-0 opacity-20">
+      <img src="https://www.figma.com/api/mcp/asset/8f602847-e88b-4f70-95a5-885300e490a2" alt="" class="absolute inset-0 w-full h-full object-cover">
+    </div>
+
+    <div class="relative z-10 text-center max-w-4xl px-6">
+      <h1 class="text-7xl md:text-8xl leading-none font-medium tracking-tighter mb-6">
+        Challenge another Player.<br>
+        <span class="garamond text-[110px] md:text-[130px] leading-none bg-clip-text text-transparent bg-gradient-to-r from-white via-white to-[#999]">Settle on-chain.</span>
+      </h1>
+      <p class="text-xl text-white/80 max-w-lg mx-auto mb-10">
+        Peer-to-peer sports wagers with trustless settlement powered by TxLINE oracle data. No house edge. Your funds, your control.
+      </p>
+      <div class="flex justify-center gap-4">
+        <button class="px-10 py-4 bg-gradient-to-r from-[#e64040] to-[#e66140] rounded-full text-lg font-medium">Enter Matchlock</button>
+        <button class="px-10 py-4 border border-white/30 rounded-full text-lg font-medium hover:bg-white/5">See how it works</button>
+      </div>
+    </div>
+
+    <!-- Match Example -->
+    <div class="absolute bottom-12 left-1/2 -translate-x-1/2 bg-[#2c2c2c] border border-[#373737] rounded-[58px] w-[989px] h-[235px] flex items-center justify-center">
+      <div class="flex items-center gap-20">
+        <!-- ARG -->
+        <div class="text-center">
+          <div class="w-20 h-20 mx-auto bg-[#383838] rounded-full flex items-center justify-center mb-4">
+            <img src="https://www.figma.com/api/mcp/asset/2c2955da-cf03-4fcb-b3ed-30dc3915565e" alt="ARG" class="w-14 h-14">
+          </div>
+          <div class="bg-[#3b312e] border border-[#e66140]/30 px-10 py-2 rounded-xl font-bold text-3xl">ARG</div>
+        </div>
+
+        <div class="text-center">
+          <div class="bg-white/70 text-black font-bold text-5xl px-10 py-4 rounded-2xl mb-4">VS</div>
+          <div class="text-[#e64d40] font-medium">Open • 1,250.00 USDC</div>
+        </div>
+
+        <!-- POR -->
+        <div class="text-center">
+          <div class="w-20 h-20 mx-auto bg-[#383838] rounded-full flex items-center justify-center mb-4">
+            <img src="https://www.figma.com/api/mcp/asset/464227e9-0858-4212-8a50-e29827677c28" alt="POR" class="w-14 h-14">
+          </div>
+          <div class="bg-[#3b312e] border border-[#e66140]/30 px-10 py-2 rounded-xl font-bold text-3xl">POR</div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- PROTOCOL WORKFLOW -->
+  <section id="workflow" class="py-32 bg-[#282828]">
+    <div class="max-w-6xl mx-auto px-6">
+      <div class="flex justify-center mb-4">
+        <div class="bg-gradient-to-r from-[#e64040] to-[#e64e40] h-1.5 w-28 rounded-full"></div>
+      </div>
+      <h2 class="text-center text-5xl font-medium tracking-tighter mb-4">Protocol Workflow</h2>
+      <p class="text-center text-white/70 text-xl max-w-md mx-auto">A secure, transparent, and decentralized flow from challenge to payout.</p>
+    </div>
+
+    <div class="grid grid-cols-2 gap-8 max-w-5xl mx-auto mt-20 px-6">
+      <div class="bg-[#2c2c2c] border border-[#373737] p-10 rounded-3xl">
+        <div class="text-4xl font-bold text-[#e64040] mb-6">01.</div>
+        <h3 class="text-3xl font-semibold mb-3">Pick a match</h3>
+        <p class="text-white/70">Browse live World Cup fixtures with real-time status and market availability.</p>
+      </div>
+      <div class="bg-[#2c2c2c] border border-[#373737] p-10 rounded-3xl">
+        <div class="text-4xl font-bold text-[#e64040] mb-6">02.</div>
+        <h3 class="text-3xl font-semibold mb-3">Challenge or accept</h3>
+        <p class="text-white/70">Create a wager on your side, or take the opposite side of an open challenge.</p>
+      </div>
+      <div class="bg-[#2c2c2c] border border-[#373737] p-10 rounded-3xl">
+        <div class="text-4xl font-bold text-[#e64040] mb-6">03.</div>
+        <h3 class="text-3xl font-semibold mb-3">Stakes lock on-chain</h3>
+        <p class="text-white/70">USDC moves securely to a program-controlled vault PDA.</p>
+      </div>
+      <div class="bg-[#2c2c2c] border border-[#373737] p-10 rounded-3xl">
+        <div class="text-4xl font-bold text-[#e64040] mb-6">04.</div>
+        <h3 class="text-3xl font-semibold mb-3">Settle automatically</h3>
+        <p class="text-white/70">When the match ends, TxLINE proves the result for 2x payout.</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- THE ADVANTAGE -->
+  <section id="advantage" class="py-32 bg-[#282828]">
+    <div class="max-w-6xl mx-auto px-6 text-center">
+      <div class="flex justify-center mb-4">
+        <div class="bg-gradient-to-r from-[#e64040] to-[#e64e40] h-1.5 w-28 rounded-full"></div>
+      </div>
+      <h2 class="text-5xl font-medium tracking-tighter mb-6">The Advantage</h2>
+      <p class="max-w-2xl mx-auto text-white/80 text-xl">Traditional platforms are designed to take a cut. Matchlock is designed to connect peers.</p>
+    </div>
+
+    <div class="max-w-5xl mx-auto mt-16 grid grid-cols-2 gap-8 px-6">
+      <!-- Traditional -->
+      <div class="bg-[#2c2c2c] p-10 rounded-3xl border border-[#373737]">
+        <h3 class="text-red-400 font-bold mb-8 text-xl">TRADITIONAL SPORTSBOOKS</h3>
+        <ul class="space-y-6 text-white/70">
+          <li class="flex gap-4"><span class="text-red-500">✕</span> 5% to 10% house edge</li>
+          <li class="flex gap-4"><span class="text-red-500">✕</span> Opaque settlement systems</li>
+          <li class="flex gap-4"><span class="text-red-500">✕</span> Forced custody of funds</li>
+        </ul>
+      </div>
+
+      <!-- Matchlock -->
+      <div class="bg-[#2c2c2c] p-10 rounded-3xl border border-[#e64040]/30 relative">
+        <div class="absolute -top-3 right-8 bg-emerald-600 text-xs px-4 py-1 rounded-full">Verified</div>
+        <h3 class="text-[#e64040] font-bold mb-8 text-xl">MATCHLOCK PROTOCOL</h3>
+        <ul class="space-y-6">
+          <li class="flex gap-4"><span class="text-emerald-400">✔</span> 0% house edge (True PvP)</li>
+          <li class="flex gap-4"><span class="text-emerald-400">✔</span> Automated cryptographic settlement</li>
+          <li class="flex gap-4"><span class="text-emerald-400">✔</span> Fully non-custodial</li>
+        </ul>
+      </div>
+    </div>
+  </section>
+
+  <!-- ACTIVE SPORTS + ROADMAP + FOOTER can be expanded similarly if needed. -->
+
+  <footer class="bg-[#282828] py-16 border-t border-white/10">
+    <div class="max-w-6xl mx-auto px-6 flex justify-between items-center">
+      <div>
+        <div class="flex items-center gap-3 mb-2">
+          <img src="https://www.figma.com/api/mcp/asset/26f120ee-24c8-4fd2-bebb-e69291b39634" alt="" class="h-8">
+          <span class="garamond text-3xl font-bold">Matchlock</span>
+        </div>
+        <p class="text-white/60">Peer-to-peer sports wagers on Solana.</p>
+      </div>
+      <div class="flex gap-8 text-sm">
+        <a href="#" class="hover:text-white">Docs</a>
+        <a href="#" class="hover:text-white">Terms</a>
+        <a href="#" class="hover:text-white">Privacy</a>
+      </div>
+      <div class="flex gap-6">
+        <!-- Social icons -->
+      </div>
+    </div>
+  </footer>
+
+  <script>
+    tailwind.config = {
+      content: [],
+      theme: { extend: {} }
+    }
+  </script>
+</body>
+</html>

@@ -1,0 +1,18 @@
+.grok/
+dump.rdb
+coverage.out
+*.local
+
+# docs
+docs/docx-build/node_modules/
+
+# Anchor
+blockchain/.anchor
+blockchain/target/deploy/
+blockchain/target/idl/
+blockchain/target/types/
+
+# Go
+backend-go/keys/
+backend-go/bin/
+backend-go/.pgdata/

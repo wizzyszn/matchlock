@@ -1,0 +1,22 @@
+{
+  "fixtureId": 17952170,
+  "gameState": "HT",
+  "startTime": 1700000000000,
+  "isTeam": true,
+  "fixtureGroupId": 12001,
+  "competitionId": 9001,
+  "countryId": 1,
+  "sportId": 1,
+  "participant1IsHome": true,
+  "participant2Id": 102,
+  "participant1Id": 101,
+  "action": "score",
+  "id": 18,
+  "ts": 1699990000000,
+  "connectionId": 42,
+  "seq": 18,
+  "scoreSoccer": {
+    "Participant1": {"Goals": 1},
+    "Participant2": {"Goals": 0}
+  }
+}

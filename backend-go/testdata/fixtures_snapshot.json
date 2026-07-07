@@ -1,0 +1,15 @@
+[
+  {
+    "Ts": 1700000000000,
+    "StartTime": 1783036800000,
+    "Competition": "World Cup",
+    "CompetitionId": 9001,
+    "FixtureGroupId": 12001,
+    "Participant1Id": 501,
+    "Participant1": "USA",
+    "Participant2Id": 502,
+    "Participant2": "Bosnia & Herzegovina",
+    "FixtureId": 18172379,
+    "Participant1IsHome": true
+  }
+]

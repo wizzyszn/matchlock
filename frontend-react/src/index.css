@@ -1,0 +1,172 @@
+@import "tailwindcss";
+@import "tw-animate-css";
+@import "shadcn/tailwind.css";
+@import "@fontsource/eb-garamond/400.css";
+@import "@fontsource/eb-garamond/500.css";
+@import "@fontsource/eb-garamond/600.css";
+@import "@fontsource-variable/manrope";
+
+@custom-variant dark (&:is(.dark *));
+
+@theme inline {
+  --radius-sm: calc(var(--radius) - 2px);
+  --radius-md: var(--radius);
+  --radius-lg: calc(var(--radius) + 4px);
+  --radius-xl: calc(var(--radius) + 8px);
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-destructive: var(--destructive);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+  --color-chart-1: var(--chart-1);
+  --color-chart-2: var(--chart-2);
+  --color-chart-3: var(--chart-3);
+  --color-chart-4: var(--chart-4);
+  --color-chart-5: var(--chart-5);
+  --color-status-open: var(--status-open);
+  --color-status-open-bg: var(--status-open-bg);
+  --color-status-matched: var(--status-matched);
+  --color-status-matched-bg: var(--status-matched-bg);
+  --color-status-settled: var(--status-settled);
+  --color-status-settled-bg: var(--status-settled-bg);
+  --color-status-cancelled: var(--status-cancelled);
+  --color-status-cancelled-bg: var(--status-cancelled-bg);
+  --font-heading: var(--font-serif);
+  --font-sans: var(--font-ui);
+  --shadow-sahara: var(--shadow-soft);
+}
+
+/* Sahara — warm minimalism (light) */
+:root {
+  --radius: 0.5rem;
+  --font-serif: "EB Garamond", Georgia, "Times New Roman", serif;
+  --font-ui: "Manrope Variable", system-ui, sans-serif;
+  --shadow-soft: 0 2px 16px rgba(58, 48, 42, 0.04);
+
+  --background: #faf5ee;
+  --foreground: #2a2420;
+  --card: #fffdf9;
+  --card-foreground: #2a2420;
+  --popover: #fffdf9;
+  --popover-foreground: #2a2420;
+  --primary: #c2652a;
+  --primary-foreground: #fffdf9;
+  --secondary: #f0e8dc;
+  --secondary-foreground: #3d342c;
+  --muted: #f3ede4;
+  --muted-foreground: #6b5f56;
+  --accent: #8c3c3c;
+  --accent-foreground: #fffdf9;
+  --destructive: #9e3a3a;
+  --border: rgba(216, 208, 200, 0.6);
+  --input: rgba(216, 208, 200, 0.85);
+  --ring: #c2652a;
+
+  --status-open: #8a6914;
+  --status-open-bg: #f5edd8;
+  --status-matched: #6b5344;
+  --status-matched-bg: #ede4dc;
+  --status-settled: #5a6b32;
+  --status-settled-bg: #e8edd8;
+  --status-cancelled: #7a7268;
+  --status-cancelled-bg: #ebe6df;
+
+  --chart-1: #c2652a;
+  --chart-2: #8c3c3c;
+  --chart-3: #6b5344;
+  --chart-4: #5a6b32;
+  --chart-5: #8a6914;
+}
+
+/* Ember — Sahara at night */
+.dark {
+  --shadow-soft: 0 2px 16px rgba(0, 0, 0, 0.2);
+
+  --background: #1e1814;
+  --foreground: #faf5ee;
+  --card: #2a2420;
+  --card-foreground: #faf5ee;
+  --popover: #2a2420;
+  --popover-foreground: #faf5ee;
+  --primary: #d4763f;
+  --primary-foreground: #1e1814;
+  --secondary: #352e28;
+  --secondary-foreground: #e8dfd4;
+  --muted: #352e28;
+  --muted-foreground: #a89e92;
+  --accent: #a85555;
+  --accent-foreground: #faf5ee;
+  --destructive: #c45c5c;
+  --border: rgba(216, 208, 200, 0.12);
+  --input: rgba(216, 208, 200, 0.18);
+  --ring: #d4763f;
+
+  --status-open: #d4a84b;
+  --status-open-bg: rgba(212, 168, 75, 0.12);
+  --status-matched: #c4a088;
+  --status-matched-bg: rgba(196, 160, 136, 0.12);
+  --status-settled: #9aad6e;
+  --status-settled-bg: rgba(154, 173, 110, 0.12);
+  --status-cancelled: #9a9288;
+  --status-cancelled-bg: rgba(154, 146, 136, 0.12);
+
+  --chart-1: #d4763f;
+  --chart-2: #a85555;
+  --chart-3: #c4a088;
+  --chart-4: #9aad6e;
+  --chart-5: #d4a84b;
+}
+
+@layer base {
+  * {
+    @apply border-border outline-ring/50;
+  }
+  body {
+    @apply antialiased bg-background text-foreground;
+  }
+  html {
+    @apply font-sans;
+  }
+  h1,
+  h2,
+  h3 {
+    font-family: var(--font-serif);
+    @apply tracking-tight;
+  }
+}
+
+@layer utilities {
+  .font-heading {
+    font-family: var(--font-serif);
+  }
+  .shadow-sahara {
+    box-shadow: var(--shadow-soft);
+  }
+  .tabular-nums {
+    font-variant-numeric: tabular-nums;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}

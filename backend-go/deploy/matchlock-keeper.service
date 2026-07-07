@@ -1,0 +1,23 @@
+[Unit]
+Description=Matchlock keeper (TxLINE ingest, settlement, API)
+After=network-online.target redis.service
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=matchlock
+Group=matchlock
+WorkingDirectory=/opt/matchlock/backend-go
+EnvironmentFile=/opt/matchlock/backend-go/.env
+ExecStart=/opt/matchlock/backend-go/bin/keeper
+Restart=on-failure
+RestartSec=5
+KillSignal=SIGTERM
+TimeoutStopSec=30
+
+# Settlement must resume quickly after outages.
+StartLimitIntervalSec=300
+StartLimitBurst=10
+
+[Install]
+WantedBy=multi-user.target

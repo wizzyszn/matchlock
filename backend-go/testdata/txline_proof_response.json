@@ -1,0 +1,20 @@
+{
+  "summary": {
+    "fixtureId": 17952170,
+    "updateStats": {
+      "updateCount": 1,
+      "minTimestamp": 1700000000000,
+      "maxTimestamp": 1700000000000
+    },
+    "eventStatsSubTreeRoot": "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA="
+  },
+  "subTreeProof": [],
+  "mainTreeProof": [],
+  "statToProve": {
+    "key": 1002,
+    "value": 1,
+    "period": 0
+  },
+  "eventStatRoot": "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=",
+  "statProof": []
+}

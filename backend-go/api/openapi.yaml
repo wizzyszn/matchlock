@@ -1,0 +1,478 @@
+openapi: 3.1.0
+info:
+  title: Matchlock Backend API
+  version: 0.1.0
+  description: |
+    REST API served by `backend-go` (keeper process). Match data is ingested from TxLINE SSE
+    and cached in Redis. Wager accounts are read from Solana RPC.
+
+    **CORS:** `GET` and `OPTIONS` are allowed from origins in `CORS_ALLOWED_ORIGINS`
+    (default `http://localhost:5173`, `http://127.0.0.1:5173`).
+
+    **On-chain writes** (`make_wager`, `accept_wager`, `cancel_wager`) are signed in the
+    browser wallet — this API is read-only.
+
+    **Devnet defaults** (see `backend-go/.env`):
+    - Program: `Ak6UgR39nvhxHjLCEkMg18NprbchYgoabvbMigkRCbbi`
+    - Stablecoin mint: `ELWTKspHKCnCfCiCiqYw1EDH77k8VCP74dK9qytG2Ujh`
+    - Cluster: `devnet`
+
+servers:
+  - url: http://localhost:8080
+    description: Local keeper (`HTTP_ADDR`, default `:8080`)
+  - url: http://127.0.0.1:8080
+    description: Local keeper (loopback)
+
+tags:
+  - name: health
+    description: Liveness and readiness probes
+  - name: matches
+    description: TxLINE fixture cache (SSE ingest)
+  - name: wagers
+    description: On-chain wager accounts (Solana RPC)
+
+paths:
+  /healthz:
+    get:
+      tags: [health]
+      operationId: getHealthz
+      summary: Liveness probe
+      description: Returns 200 when the HTTP server is running. Does not check dependencies.
+      responses:
+        "200":
+          description: Server is alive
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/HealthStatus"
+              example:
+                status: ok
+
+  /readyz:
+    get:
+      tags: [health]
+      operationId: getReadyz
+      summary: Readiness probe
+      description: |
+        Checks Redis, Solana RPC, and TxLINE API reachability. Returns 503 when any
+        dependency is unavailable.
+      responses:
+        "200":
+          description: All dependencies healthy
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ReadyStatus"
+              example:
+                status: ready
+                checks:
+                  redis: ok
+                  rpc: ok
+                  txline: ok
+        "503":
+          description: One or more dependencies failed
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/NotReadyStatus"
+
+  /matches:
+    get:
+      tags: [matches]
+      operationId: listMatches
+      summary: List cached matches
+      description: |
+        Returns all matches currently in the Redis cache, populated by the TxLINE scores
+        SSE ingestor. Empty array when no fixtures have been observed yet.
+      responses:
+        "200":
+          description: Match list
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Match"
+              example:
+                - match_id: "17952170"
+                  fixture_id: 17952170
+                  status: F2
+                  is_final: true
+                  home_goals: 2
+                  away_goals: 1
+                  seq: 941
+                  updated_at: "2026-07-01T10:00:00Z"
+                  finalized_at: "2026-07-01T10:05:00Z"
+        "500":
+          $ref: "#/components/responses/CacheError"
+
+  /matches/{id}:
+    get:
+      tags: [matches]
+      operationId: getMatch
+      summary: Get match by ID
+      description: |
+        `id` is the canonical match identifier — the decimal TxLINE `fixtureId` string
+        (same value used as `match_id` in on-chain wagers).
+      parameters:
+        - $ref: "#/components/parameters/MatchId"
+      responses:
+        "200":
+          description: Match found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Match"
+        "400":
+          $ref: "#/components/responses/InvalidMatchId"
+        "404":
+          $ref: "#/components/responses/MatchNotFound"
+        "500":
+          $ref: "#/components/responses/CacheError"
+
+  /wagers:
+    get:
+      tags: [wagers]
+      operationId: listWagers
+      summary: List on-chain wagers
+      description: |
+        Scans Matchlock program accounts via Solana RPC with optional filters.
+
+        **Note:** The list endpoint only returns wagers in `open` or `matched` status.
+        Settled and cancelled accounts are omitted from list results (use `GET /wagers/{pubkey}`
+        for historical lookup when the account still exists).
+      parameters:
+        - name: match_id
+          in: query
+          required: false
+          description: Filter by wager `match_id` (UTF-8 fixture id string)
+          schema:
+            type: string
+            example: "17952170"
+        - name: status
+          in: query
+          required: false
+          description: Filter by wager status
+          schema:
+            $ref: "#/components/schemas/WagerStatus"
+      responses:
+        "200":
+          description: Wager list
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Wager"
+              example:
+                - pubkey: "8fwJw3XMgFgvjar6oMY72zmfE1K1ycJhQRhSL5LEJMjK"
+                  maker: "2qtn5WqZhXxEpgVqJy1u2m9RjXDkWsP2NdGq9BmPQGRP"
+                  taker: "C35VqkQNy5ozpvPrben2u6YH8X9y3irLDGW6wRs5LVSk"
+                  match_id: "17952170"
+                  maker_side: home
+                  stake: 100000
+                  status: matched
+        "400":
+          $ref: "#/components/responses/InvalidQuery"
+        "502":
+          $ref: "#/components/responses/RpcError"
+
+  /wagers/{pubkey}:
+    get:
+      tags: [wagers]
+      operationId: getWager
+      summary: Get wager by account pubkey
+      parameters:
+        - $ref: "#/components/parameters/WagerPubkey"
+      responses:
+        "200":
+          description: Wager found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Wager"
+        "400":
+          $ref: "#/components/responses/InvalidPubkey"
+        "404":
+          $ref: "#/components/responses/WagerNotFound"
+        "502":
+          $ref: "#/components/responses/RpcError"
+
+components:
+  parameters:
+    MatchId:
+      name: id
+      in: path
+      required: true
+      description: Match identifier (decimal fixture id string)
+      schema:
+        type: string
+        example: "17952170"
+    WagerPubkey:
+      name: pubkey
+      in: path
+      required: true
+      description: Base58-encoded Solana wager account public key
+      schema:
+        type: string
+        example: "8fwJw3XMgFgvjar6oMY72zmfE1K1ycJhQRhSL5LEJMjK"
+
+  schemas:
+    HealthStatus:
+      type: object
+      required: [status]
+      properties:
+        status:
+          type: string
+          enum: [ok]
+
+    ReadyStatus:
+      type: object
+      required: [status, checks]
+      properties:
+        status:
+          type: string
+          enum: [ready]
+        checks:
+          $ref: "#/components/schemas/DependencyChecks"
+
+    NotReadyStatus:
+      type: object
+      required: [status, checks, error, code]
+      properties:
+        status:
+          type: string
+          enum: [not_ready]
+        checks:
+          $ref: "#/components/schemas/DependencyChecks"
+        error:
+          type: string
+          example: dependencies unavailable
+        code:
+          type: string
+          enum: [NOT_READY]
+
+    DependencyChecks:
+      type: object
+      required: [redis, rpc, txline]
+      properties:
+        redis:
+          type: string
+          description: `"ok"` or error message
+        rpc:
+          type: string
+          description: `"ok"` or error message
+        txline:
+          type: string
+          description: `"ok"` or error message
+
+    Match:
+      type: object
+      required:
+        - match_id
+        - fixture_id
+        - status
+        - is_final
+        - seq
+        - updated_at
+      properties:
+        match_id:
+          type: string
+          description: Canonical id (decimal fixture id)
+        fixture_id:
+          type: integer
+          format: int64
+          description: TxLINE fixture id
+        status:
+          type: string
+          description: TxLINE `gameState` (e.g. HT, F2, scheduled)
+        is_final:
+          type: boolean
+          description: True when game reached a terminal state
+        home_goals:
+          type: integer
+          format: int32
+          nullable: true
+        away_goals:
+          type: integer
+          format: int32
+          nullable: true
+        seq:
+          type: integer
+          format: int32
+          description: Latest observed TxLINE scores sequence number
+        updated_at:
+          type: string
+          format: date-time
+        finalized_at:
+          type: string
+          format: date-time
+          nullable: true
+        start_time:
+          type: integer
+          format: int64
+          description: Kickoff time in epoch milliseconds (TxLINE StartTime)
+        competition_id:
+          type: integer
+          format: int32
+        competition:
+          type: string
+          description: Competition name from fixtures snapshot
+        fixture_group_id:
+          type: integer
+          format: int32
+        participant1_id:
+          type: integer
+          format: int32
+        participant2_id:
+          type: integer
+          format: int32
+        home_team:
+          type: string
+        away_team:
+          type: string
+        sport_id:
+          type: integer
+          format: int32
+        country_id:
+          type: integer
+          format: int32
+        odds:
+          type: object
+          nullable: true
+          properties:
+            home:
+              type: number
+              format: double
+            draw:
+              type: number
+              format: double
+            away:
+              type: number
+              format: double
+
+    Wager:
+      type: object
+      required:
+        - pubkey
+        - maker
+        - taker
+        - match_id
+        - maker_side
+        - stake
+        - status
+      properties:
+        pubkey:
+          type: string
+          description: Wager account address (base58)
+        maker:
+          type: string
+          description: Maker wallet (base58)
+        taker:
+          type: string
+          description: Taker wallet (base58); zero key when open
+        match_id:
+          type: string
+          description: Fixture id string baked into the wager PDA
+        maker_side:
+          $ref: "#/components/schemas/Side"
+        stake:
+          type: integer
+          format: int64
+          description: Stake per side in stablecoin smallest units (6 decimals on devnet USDT)
+          example: 100000
+        status:
+          $ref: "#/components/schemas/WagerStatus"
+
+    Side:
+      type: string
+      enum: [home, away]
+
+    WagerStatus:
+      type: string
+      enum: [open, matched, settled, cancelled]
+
+    Error:
+      type: object
+      required: [error, code]
+      properties:
+        error:
+          type: string
+          description: Human-readable message
+        code:
+          type: string
+          description: Machine-readable error code
+          enum:
+            - CACHE_ERROR
+            - RPC_ERROR
+            - NOT_READY
+            - INVALID_MATCH_ID
+            - MATCH_NOT_FOUND
+            - INVALID_PUBKEY
+            - WAGER_NOT_FOUND
+            - INVALID_QUERY
+
+  responses:
+    CacheError:
+      description: Redis cache error
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
+          example:
+            error: failed to list matches
+            code: CACHE_ERROR
+    RpcError:
+      description: Solana RPC error
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
+          example:
+            error: failed to list wagers
+            code: RPC_ERROR
+    InvalidMatchId:
+      description: Missing or empty match id
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
+          example:
+            error: match id is required
+            code: INVALID_MATCH_ID
+    MatchNotFound:
+      description: Match not in cache
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
+          example:
+            error: match not found
+            code: MATCH_NOT_FOUND
+    InvalidPubkey:
+      description: Invalid wager pubkey
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
+          example:
+            error: invalid wager pubkey
+            code: INVALID_PUBKEY
+    WagerNotFound:
+      description: Wager account not found on chain
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
+          example:
+            error: wager not found
+            code: WAGER_NOT_FOUND
+    InvalidQuery:
+      description: Invalid query parameter
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
+          example:
+            error: status must be open, matched, settled, or cancelled
+            code: INVALID_QUERY
