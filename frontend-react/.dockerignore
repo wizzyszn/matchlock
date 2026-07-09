@@ -1,0 +1,11 @@
+# Deps + build output are regenerated inside the image
+node_modules/
+dist/
+
+# NOTE: .env is intentionally NOT ignored — it holds public VITE_* values
+# (RPC URL, program id, mint) that Vite must inline at build time.
+
+# Logs and VCS
+*.log
+.git/
+.gitignore

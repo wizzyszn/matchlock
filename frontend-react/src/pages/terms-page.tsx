@@ -7,11 +7,9 @@ export function TermsPage() {
   return (
     <div className="mx-auto min-h-svh max-w-3xl px-4 py-12 sm:py-16">
       <div className="mb-8">
-        <Button variant="ghost" size="sm" asChild>
-          <Link to="/login" className="gap-2">
-            <ArrowLeft className="size-4" />
-            Back to login
-          </Link>
+        <Button variant="ghost" size="sm" render={<Link to="/login" className="gap-2" />}>
+          <ArrowLeft className="size-4" />
+          Back to login
         </Button>
       </div>
 
