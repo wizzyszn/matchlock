@@ -1,5 +1,9 @@
+import { Loader2, Mail } from 'lucide-react'
+import { useForm } from 'react-hook-form'
+import { zodResolver } from '@hookform/resolvers/zod'
+import { z } from 'zod'
 import { useState } from 'react'
-import { Loader2, Mail,  Sparkles, } from 'lucide-react'
+import { Link, useLocation } from 'react-router-dom'
 
 import { Button } from '@/components/ui/button'
 import {
@@ -12,60 +16,94 @@ import {
 import { Input } from '@/components/ui/input'
 import { useAuthMutations } from '@/hooks/mutations/use-auth-mutations'
 import { ApiClientError } from '@/lib/api'
+import MatchLockLogo from '@/components/brand/matchlock-logo'
+import { PoweredByTxLine } from '@/components/brand/powered-by-txline'
+
+const REDIRECT_KEY = 'post_auth_redirect'
+
+const loginSchema = z.object({
+  email: z
+    .string()
+    .min(1, 'Email is required')
+    .email('Enter a valid email address'),
+})
+
+type LoginFormValues = z.infer<typeof loginSchema>
 
 export function LoginPage() {
   const { requestMagicLink } = useAuthMutations()
-  const [email, setEmail] = useState('')
-  const [sent, setSent] = useState(false)
+  const [sentTo, setSentTo] = useState<string | null>(null)
+  const location = useLocation()
 
-  const handleSubmit = async (event: React.FormEvent) => {
-    event.preventDefault()
+  const onSubmit = async ({ email }: LoginFormValues) => {
     await requestMagicLink.mutateAsync(email.trim())
-    setSent(true)
+    const from = (location.state as { from?: string } | null)?.from
+    if (from) {
+      sessionStorage.setItem(REDIRECT_KEY, from)
+    }
+    setSentTo(email.trim())
   }
 
+  const {
+    register,
+    handleSubmit,
+    formState: { errors, isSubmitting },
+  } = useForm<LoginFormValues>({
+    resolver: zodResolver(loginSchema),
+  })
+
   return (
-    <div className="w-full space-y-6">
-      <div className="space-y-3 text-center">
-        <div className="mx-auto flex size-14 items-center justify-center rounded-2xl border bg-card shadow-sahara">
-          <Sparkles className="size-7 text-primary" aria-hidden />
+    <div className="w-full space-y-8">
+      {/* Brand + headline */}
+      <div className="space-y-4 text-center">
+        <MatchLockLogo />
+        <div className="space-y-2">
+          <h1 className="font-heading text-3xl tracking-tight sm:text-4xl">
+            Welcome back
+          </h1>
+          <p className="mx-auto max-w-xs text-sm text-muted-foreground">
+            Peer-to-peer wagers on Solana- <PoweredByTxLine />   
+          </p>
         </div>
-        <h1 className="font-heading text-3xl tracking-tight sm:text-4xl">
-          Enter Matchlock
-        </h1>
-        <p className="mx-auto max-w-sm text-sm text-muted-foreground">
-          Passwordless sign-in for peer-to-peer wagers on Solana devnet.
-        </p>
       </div>
 
       <Card className="border-border/80 shadow-sahara">
-        <CardHeader className="pb-4 text-center">
-          <CardTitle className="text-xl">Magic link sign-in</CardTitle>
-          <CardDescription>
-            We&apos;ll email a one-time link — no seed phrase required to sign
-            in.
-          </CardDescription>
-        </CardHeader>
+        {!sentTo && (
+          <CardHeader className="pb-2 text-center">
+            <CardTitle className="text-lg">Sign in with a magic link</CardTitle>
+            <CardDescription className="mt-1">
+              Enter your email and we&apos;ll send a one-time link to your inbox.
+            </CardDescription>
+          </CardHeader>
+        )}
 
-        <CardContent>
-          {sent ? (
-            <div className="space-y-4 text-center">
-              <Mail className="mx-auto size-10 text-primary" aria-hidden />
-              <div className="space-y-1">
-                <p className="font-medium">Check your inbox</p>
+        <CardContent className="pt-6">
+          {sentTo ? (
+            /* ── Success state ── */
+            <div className="flex flex-col items-center gap-5 py-2 text-center">
+              <div className="flex size-14 items-center justify-center rounded-full bg-primary/10">
+                <Mail className="size-7 text-primary" aria-hidden />
+              </div>
+              <div className="space-y-1.5">
+                <p className="font-semibold">Check your inbox</p>
                 <p className="text-sm text-muted-foreground">
-                  If{' '}
-                  <span className="font-medium text-foreground">{email}</span>{' '}
-                  is registered, your secure sign-in link is on its way.
+                  A magic link was sent to{' '}
+                  <span className="font-medium text-foreground">{sentTo}</span>.
+                  It expires in 15 minutes.
                 </p>
               </div>
-              <Button variant="outline" onClick={() => setSent(false)}>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setSentTo(null)}
+              >
                 Use a different email
-              </Button>
+</Button>
             </div>
           ) : (
-            <form onSubmit={handleSubmit} className="space-y-4">
-              <div className="space-y-2">
+            /* ── Form state ── */
+            <form onSubmit={handleSubmit(onSubmit)} className="space-y-5" noValidate>
+              <div className="space-y-1.5">
                 <label htmlFor="email" className="text-sm font-medium">
                   Email address
                 </label>
@@ -74,42 +112,59 @@ export function LoginPage() {
                   type="email"
                   autoComplete="email"
                   placeholder="you@example.com"
-                  value={email}
-                  onChange={(e) => setEmail(e.target.value)}
-                  required
                   className="min-h-11"
+                  aria-invalid={!!errors.email}
+                  {...register('email')}
                 />
+                {errors.email && (
+                  <p className="text-xs text-destructive" role="alert">
+                    {errors.email.message}
+                  </p>
+                )}
               </div>
 
-              {requestMagicLink.error ? (
+              {requestMagicLink.isError && (
                 <p className="text-sm text-destructive" role="alert">
                   {requestMagicLink.error instanceof ApiClientError &&
                   requestMagicLink.error.code === 'RATE_LIMITED'
-                    ? 'You’ve requested several links recently. Wait about a minute, then try again (max 8 per hour).'
+                    ? 'Too many requests — wait a minute and try again.'
                     : requestMagicLink.error instanceof Error
                       ? requestMagicLink.error.message
-                      : 'Could not send magic link'}
+                      : 'Could not send magic link. Please try again.'}
                 </p>
-              ) : null}
+              )}
 
               <Button
                 type="submit"
                 className="w-full min-h-11"
-                disabled={requestMagicLink.isPending || !email.trim()}
+                disabled={isSubmitting || requestMagicLink.isPending}
               >
-                {requestMagicLink.isPending ? (
+                {requestMagicLink.isPending || isSubmitting ? (
                   <>
                     <Loader2 className="mr-2 size-4 animate-spin" aria-hidden />
-                    Sending secure link…
+                    Sending link…
                   </>
                 ) : (
-                  'Email me a sign-in link'
+                  'Send magic link'
                 )}
               </Button>
             </form>
           )}
         </CardContent>
       </Card>
+
+      <div className="space-y-1 text-center">
+        <p className="text-xs text-muted-foreground">
+          By signing in, you agree to our{' '}
+          <Link to="/terms" className="underline underline-offset-2 hover:text-foreground">
+            Terms & Conditions
+          </Link>
+          .
+        </p>
+        <p className="text-xs font-medium text-amber-500/80">
+          Gamble responsibly. Must be 18+.
+        </p>
+      </div>
     </div>
   )
 }

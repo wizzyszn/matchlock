@@ -118,8 +118,17 @@ func (idx *WagerIndexer) backfill(ctx context.Context) error {
 		return err2
 	}
 
+	currentWagers, err := idx.cache.ListWagers(ctx)
+	if err != nil {
+		slog.Error("wager indexer backfill active wagers fetch failed", "err", err)
+	}
+	activeMap := make(map[string]bool)
+
 	indexed := 0
 	for _, acct := range accounts {
+		pubkeyStr := acct.Pubkey.String()
+		activeMap[pubkeyStr] = true
+
 		w, err := chainsol.DecodeWager(acct.Pubkey, acct.Account.Data.GetBinary())
 		if err != nil {
 			continue
@@ -131,7 +140,21 @@ func (idx *WagerIndexer) backfill(ctx context.Context) error {
 		}
 		indexed++
 	}
-	slog.Info("wager indexer backfill complete", "indexed", indexed, "total_accounts", len(accounts))
+
+	deleted := 0
+	if currentWagers != nil {
+		for _, cw := range currentWagers {
+			if !activeMap[cw.Pubkey] {
+				if err := idx.cache.DeleteWager(ctx, cw.Pubkey); err != nil {
+					slog.Error("wager indexer backfill delete failed", "pubkey", cw.Pubkey, "err", err)
+				} else {
+					deleted++
+				}
+			}
+		}
+	}
+
+	slog.Info("wager indexer backfill complete", "indexed", indexed, "deleted", deleted, "total_accounts", len(accounts))
 	return nil
 }
 
@@ -159,6 +182,16 @@ func (idx *WagerIndexer) runWSSubscription(ctx context.Context) error {
 		if err != nil {
 			return err
 		}
+		
+		if got.Value.Account.Lamports == 0 || len(got.Value.Account.Data.GetBinary()) == 0 {
+			if err := idx.cache.DeleteWager(ctx, got.Value.Pubkey.String()); err != nil {
+				slog.Error("wager indexer ws delete failed", "pubkey", got.Value.Pubkey.String(), "err", err)
+			} else {
+				slog.Debug("wager indexer ws deleted", "pubkey", got.Value.Pubkey.String())
+			}
+			continue
+		}
+
 		w, err := chainsol.DecodeWager(got.Value.Pubkey, got.Value.Account.Data.GetBinary())
 		if err != nil {
 			continue

@@ -95,6 +95,14 @@ export function useAuthMutations() {
     },
   })
 
+  const updateInvite = useMutation({
+    mutationFn: ({ id, status }: { id: string; status: 'accepted' | 'declined' }) =>
+      api.updateInvite(id, status),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: queryKeys.auth.invites })
+    },
+  })
+
   return {
     requestMagicLink,
     verifyMagicLink,
@@ -105,6 +113,7 @@ export function useAuthMutations() {
     setPrimaryWallet,
     lookupUser,
     createInvite,
+    updateInvite,
     connection,
     publicKey,
   }

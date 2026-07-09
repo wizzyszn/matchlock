@@ -1,8 +1,10 @@
 import { useWallet } from '@solana/wallet-adapter-react'
 import { PublicKey } from '@solana/web3.js'
 import { Loader2, Swords } from 'lucide-react'
-import { Link } from 'react-router-dom'
+import { Link, useNavigate } from 'react-router-dom'
 import { useCallback, useEffect, useMemo, useState } from 'react'
+import { toast } from 'sonner'
+import { useMediaQuery } from '@/hooks/use-media-query'
 
 
 import { Button } from '@/components/ui/button'
@@ -58,6 +60,7 @@ function ChallengeSlipBody({
   initialSide?: Side
   onSuccess?: () => void
 }) {
+  const navigate = useNavigate()
   const { publicKey } = useWallet()
   const { data: balance = BigInt(0) } = useTokenBalanceQuery()
   const { data: session } = useSessionQuery()
@@ -100,7 +103,6 @@ function ChallengeSlipBody({
     challengeMode === 'open' ||
     (Boolean(session) &&
       friendLookup !== null &&
-      Boolean(friendLookup.primary_wallet) &&
       !isSelfChallenge)
 
   const handleLookupFriend = async () => {
@@ -180,22 +182,35 @@ function ChallengeSlipBody({
         makerSide: side,
         invitedTaker,
       })
+
       if (challengeMode === 'friend' && session && friendEmail.trim()) {
-        await createInvite.mutateAsync({
-          recipient_email: friendEmail.trim(),
-          wager_pubkey: wagerPubkey,
-          match_id: match.match_id,
-          maker_side: side,
-          stake: Number(usdcToBaseUnits(stakeUsdc)),
-          home_team: labels.homeTeam,
-          away_team: labels.awayTeam,
-        })
+        try {
+          await createInvite.mutateAsync({
+            recipient_email: friendEmail.trim(),
+            wager_pubkey: wagerPubkey,
+            match_id: match.match_id,
+            maker_side: side,
+            stake: Number(usdcToBaseUnits(stakeUsdc)),
+            home_team: labels.homeTeam,
+            away_team: labels.awayTeam,
+          })
+        } catch {
+          toast.warning('Wager created, but the invite could not be sent.')
+        }
       }
+
       setSignature(signature)
+      setDialogOpen(false)
       setStakeInput('')
+      setFriendEmail('')
+      setFriendLookup(null)
+      toast.success('Wager created successfully.')
       onSuccess?.()
+      navigate('/my-wagers')
     } catch (error) {
-      setTxError(mapError(error))
+      const message = mapError(error)
+      setTxError(message)
+      toast.error(message)
     }
   }
 
@@ -311,16 +326,10 @@ function ChallengeSlipBody({
                               </span>{' '}
                               can accept.
                             </p>
-                          ) : friendLookup.has_account ? (
-                            <p>
-                              Friend has an account but hasn&apos;t linked a
-                              wallet yet. They must link one on Profile before
-                              accepting direct challenges.
-                            </p>
                           ) : (
                             <p className="text-muted-foreground">
-                              No account yet — they&apos;ll receive an email
-                              invite after you create the challenge.
+                              They&apos;ll receive a challenge invite by email
+                              once you create this wager.
                             </p>
                           )}
                         </div>
@@ -434,23 +443,53 @@ export function ChallengeSlipDialog({
   open: boolean
   onOpenChange: (open: boolean) => void
 }) {
+  const isDesktop = useMediaQuery('(min-width: 40rem)')
+
   return (
     <Sheet open={open} onOpenChange={onOpenChange}>
-      <SheetContent className="w-full sm:max-w-[420px] overflow-y-auto px-4 sm:px-6">
-        <SheetHeader className="mb-6 text-left">
-          <SheetTitle>Create challenge</SheetTitle>
-          <SheetDescription className="text-xs">
-            Pick your outcome, set your stake, and post an open PvP wager.
-          </SheetDescription>
-        </SheetHeader>
-        <div className="pb-6 w-full max-w-full">
-          <ChallengeSlipBody
-            match={match}
-            initialSide={initialSide}
-            onSuccess={() => onOpenChange(false)}
-          />
-        </div>
-      </SheetContent>
+      {isDesktop ? (
+        <SheetContent
+          side="right"
+          className="w-full sm:max-w-[420px] overflow-y-auto px-4 sm:px-6"
+        >
+          <SheetHeader className="mb-6 text-left">
+            <SheetTitle>Create challenge</SheetTitle>
+            <SheetDescription className="text-xs">
+              Pick your outcome, set your stake, and post an open PvP wager.
+            </SheetDescription>
+          </SheetHeader>
+          <div className="pb-6 w-full max-w-full">
+            <ChallengeSlipBody
+              match={match}
+              initialSide={initialSide}
+              onSuccess={() => onOpenChange(false)}
+            />
+          </div>
+        </SheetContent>
+      ) : (
+        <SheetContent
+          side="bottom"
+          showCloseButton={false}
+          className="max-h-[90dvh] overflow-y-auto rounded-t-2xl border-t px-4 pb-8 pt-6"
+        >
+          <div className="mb-4 flex items-center justify-center">
+            <div className="h-1.5 w-12 rounded-full bg-border" />
+          </div>
+          <SheetHeader className="mb-4 text-left px-0">
+            <SheetTitle>Create challenge</SheetTitle>
+            <SheetDescription className="text-xs">
+              Pick your outcome, set your stake, and post an open PvP wager.
+            </SheetDescription>
+          </SheetHeader>
+          <div className="w-full max-w-full">
+            <ChallengeSlipBody
+              match={match}
+              initialSide={initialSide}
+              onSuccess={() => onOpenChange(false)}
+            />
+          </div>
+        </SheetContent>
+      )}
     </Sheet>
   )
 }

@@ -26,6 +26,9 @@ export type MyWagerCardProps = {
 }
 
 function roleLabel(wager: Wager, isMaker: boolean) {
+  if (wager.status === 'cancelled') {
+    return isMaker ? 'You cancelled this wager' : 'This wager was cancelled'
+  }
   if (wager.status === 'open') {
     return isMaker ? 'Your open challenge' : 'Challenge you joined'
   }
@@ -59,7 +62,7 @@ export function MyWagerCard({
 
   const opponent = isMaker ? wager.taker : wager.maker
   const awaitingOpponent =
-    wager.status === 'open' || isPlaceholderAddress(opponent)
+    wager.status === 'open' && isPlaceholderAddress(opponent)
   const showOpponent = !awaitingOpponent && opponent.length > 0
 
   return (

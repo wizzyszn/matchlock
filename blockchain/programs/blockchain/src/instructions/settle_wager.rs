@@ -121,12 +121,7 @@ pub fn handle_settle_wager(
     let match_id_slice = &match_id[..match_id_len as usize];
     let decimals = ctx.accounts.stablecoin_mint.decimals;
 
-    let seeds = &[
-        WAGER_SEED,
-        maker.as_ref(),
-        match_id_slice,
-        &[bump],
-    ];
+    let seeds = &[WAGER_SEED, maker.as_ref(), match_id_slice, &[bump]];
     let signer = &[&seeds[..]];
 
     let transfer_accounts = TransferChecked {
@@ -135,11 +130,8 @@ pub fn handle_settle_wager(
         to: ctx.accounts.winner_stablecoin.to_account_info(),
         authority: ctx.accounts.wager.to_account_info(),
     };
-    let transfer_ctx = CpiContext::new_with_signer(
-        ctx.accounts.token_program.key(),
-        transfer_accounts,
-        signer,
-    );
+    let transfer_ctx =
+        CpiContext::new_with_signer(ctx.accounts.token_program.key(), transfer_accounts, signer);
     token::transfer_checked(transfer_ctx, total_payout, decimals)?;
 
     let close_accounts = CloseAccount {
@@ -147,11 +139,8 @@ pub fn handle_settle_wager(
         destination: ctx.accounts.winner.to_account_info(),
         authority: ctx.accounts.wager.to_account_info(),
     };
-    let close_ctx = CpiContext::new_with_signer(
-        ctx.accounts.token_program.key(),
-        close_accounts,
-        signer,
-    );
+    let close_ctx =
+        CpiContext::new_with_signer(ctx.accounts.token_program.key(), close_accounts, signer);
     token::close_account(close_ctx)?;
 
     let wager = &mut ctx.accounts.wager;

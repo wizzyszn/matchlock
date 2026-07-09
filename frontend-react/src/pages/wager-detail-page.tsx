@@ -2,6 +2,7 @@ import { useWallet } from '@solana/wallet-adapter-react'
 import { ArrowLeft, ExternalLink, Loader2, Swords, Clock } from 'lucide-react'
 import { useCallback, useMemo, useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
+import { toast } from 'sonner'
 
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
@@ -146,13 +147,17 @@ export function WagerDetailPage() {
     setTxError(null)
     try {
       if (confirmDetails?.action === 'cancel' && wager) {
-        const sig = await cancelWager.mutateAsync({ wagerPubkey: wager.pubkey })
-        setSignature(sig)
+        const sig = await cancelWager.mutateAsync({
+          wagerPubkey: wager.pubkey,
+          wager,
+        })
+        setSignature(sig.signature)
+        toast.success('Wager cancelled.')
         return
       }
       if (confirmDetails?.action === 'claim' && wager) {
         const sig = await claimWager.mutateAsync({ wagerPubkey: wager.pubkey })
-        setSignature(sig)
+        setSignature(sig.signature)
         return
       }
       if (confirmDetails?.action === 'accept' && acceptTarget) {

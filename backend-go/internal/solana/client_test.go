@@ -13,7 +13,7 @@ import (
 )
 
 const (
-	testProgramID = "Ak6UgR39nvhxHjLCEkMg18NprbchYgoabvbMigkRCbbi"
+	testProgramID = "VgsUt4Fjn6jqrqP7EuqvWJM3NqYufA2haNrP9fGGaYv"
 	testMint      = "ELWTKspHKCnCfCiCiqYw1EDH77k8VCP74dK9qytG2Ujh"
 	testTxlineID  = "6pW64gN1s2uqjHkn1unFeEjAwJkPGHoppGvS715wyP2J"
 )
@@ -176,7 +176,7 @@ func TestSettleWagerSuccess(t *testing.T) {
 
 	args := ValidateStatArgs{TS: 1700000000000}
 	sig, err := client.SettleWager(context.Background(), SettleParams{
-		Settler:      keeper.PrivateKey,
+		Settler:     keeper.PrivateKey,
 		Wager:       wager,
 		Validation:  args,
 		WinningSide: SideHome,
@@ -208,7 +208,7 @@ func TestSettleWagerIdempotentPaths(t *testing.T) {
 	copy(wager.MatchID[:], []byte("17952170"))
 
 	_, err := client.SettleWager(context.Background(), SettleParams{
-		Settler:      keeper.PrivateKey,
+		Settler:     keeper.PrivateKey,
 		Wager:       wager,
 		Validation:  ValidateStatArgs{TS: 1700000000000},
 		WinningSide: SideHome,
@@ -224,7 +224,7 @@ func TestSettleWagerIdempotentPaths(t *testing.T) {
 		return nil, errors.New("InvalidStatus already in use")
 	}
 	_, err = client.SettleWager(context.Background(), SettleParams{
-		Settler:      keeper.PrivateKey,
+		Settler:     keeper.PrivateKey,
 		Wager:       wager,
 		Validation:  ValidateStatArgs{TS: 1700000000000},
 		WinningSide: SideHome,
@@ -240,7 +240,7 @@ func TestSettleWagerWinnerError(t *testing.T) {
 	client := testClient(t, mock)
 	wager := Wager{Pubkey: solana.NewWallet().PublicKey(), MakerSide: SideHome}
 	_, err := client.SettleWager(context.Background(), SettleParams{
-		Settler:      solana.NewWallet().PrivateKey,
+		Settler:     solana.NewWallet().PrivateKey,
 		Wager:       wager,
 		Validation:  ValidateStatArgs{TS: 1},
 		WinningSide: 9,

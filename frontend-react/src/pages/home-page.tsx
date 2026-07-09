@@ -1,5 +1,6 @@
 import { ArrowRight, Check, X } from 'lucide-react'
 import { Link } from 'react-router-dom'
+import logoUrl from '@/assets/g17.svg'
 
 const NAV_LINKS = [
   { href: '#workflow', label: 'How it Works' },
@@ -37,6 +38,7 @@ export function HomePage() {
       {/* NAV */}
       <nav className="fixed top-8 left-1/2 -translate-x-1/2 bg-[#2c2c2c] border border-[#373737] rounded-[100px] py-4 px-10 flex items-center justify-between w-[1282px] max-w-[95vw] z-50">
         <div className="flex items-center gap-3">
+          <img src={logoUrl} alt="" className="h-7 w-auto object-contain" />
           <span className="font-heading text-3xl font-bold">Matchlock</span>
         </div>
         <div className="hidden lg:flex gap-8 text-sm font-medium">
@@ -187,13 +189,14 @@ export function HomePage() {
         <div className="max-w-6xl mx-auto px-6 flex flex-col md:flex-row justify-between items-center gap-8">
           <div className="text-center md:text-left">
             <div className="flex items-center gap-3 mb-2 justify-center md:justify-start">
+              <img src={logoUrl} alt="" className="h-7 w-auto object-contain" />
               <span className="font-heading text-3xl font-bold">Matchlock</span>
             </div>
             <p className="text-white/60">Peer-to-peer sports wagers on Solana.</p>
           </div>
           <div className="flex gap-8 text-sm">
             <Link to="#" className="hover:text-white transition-colors">Docs</Link>
-            <Link to="#" className="hover:text-white transition-colors">Terms</Link>
+            <Link to="/terms" className="hover:text-white transition-colors">Terms</Link>
             <Link to="#" className="hover:text-white transition-colors">Privacy</Link>
           </div>
         </div>

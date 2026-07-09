@@ -1,9 +1,6 @@
 @import "tailwindcss";
 @import "tw-animate-css";
 @import "shadcn/tailwind.css";
-@import "@fontsource/eb-garamond/400.css";
-@import "@fontsource/eb-garamond/500.css";
-@import "@fontsource/eb-garamond/600.css";
 @import "@fontsource-variable/manrope";
 
 @custom-variant dark (&:is(.dark *));
@@ -49,97 +46,102 @@
   --shadow-sahara: var(--shadow-soft);
 }
 
-/* Sahara — warm minimalism (light) */
+/* Matchlock Design System Theme (Dark, Red-Forward) */
 :root {
   --radius: 0.5rem;
-  --font-serif: "EB Garamond", Georgia, "Times New Roman", serif;
+  --font-serif: "Manrope Variable", system-ui, sans-serif;
   --font-ui: "Manrope Variable", system-ui, sans-serif;
-  --shadow-soft: 0 2px 16px rgba(58, 48, 42, 0.04);
+  --shadow-soft: none;
 
-  --background: #faf5ee;
-  --foreground: #2a2420;
-  --card: #fffdf9;
-  --card-foreground: #2a2420;
-  --popover: #fffdf9;
-  --popover-foreground: #2a2420;
-  --primary: #c2652a;
-  --primary-foreground: #fffdf9;
-  --secondary: #f0e8dc;
-  --secondary-foreground: #3d342c;
-  --muted: #f3ede4;
-  --muted-foreground: #6b5f56;
-  --accent: #8c3c3c;
-  --accent-foreground: #fffdf9;
-  --destructive: #9e3a3a;
-  --border: rgba(216, 208, 200, 0.6);
-  --input: rgba(216, 208, 200, 0.85);
-  --ring: #c2652a;
+  --background: #282828;
+  --foreground: #ffffff;
+  --card: #2c2c2c;
+  --card-foreground: #ffffff;
+  --popover: #2c2c2c;
+  --popover-foreground: #ffffff;
+  --primary: #e64040;
+  --primary-foreground: #ffffff;
+  --secondary: #383838;
+  --secondary-foreground: #ffffff;
+  --muted: #383838;
+  --muted-foreground: rgba(255, 255, 255, 0.7);
+  --accent: #e66140;
+  --accent-foreground: #ffffff;
+  --destructive: #ef4444;
+  --border: #373737;
+  --input: #373737;
+  --ring: #e66140;
 
-  --status-open: #8a6914;
-  --status-open-bg: #f5edd8;
-  --status-matched: #6b5344;
-  --status-matched-bg: #ede4dc;
-  --status-settled: #5a6b32;
-  --status-settled-bg: #e8edd8;
+  --status-open: #e64d40;
+  --status-open-bg: rgba(230, 77, 64, 0.15);
+  --status-matched: #34d399;
+  --status-matched-bg: rgba(52, 211, 153, 0.15);
+  --status-settled: #059669;
+  --status-settled-bg: rgba(5, 150, 105, 0.15);
   --status-cancelled: #7a7268;
-  --status-cancelled-bg: #ebe6df;
+  --status-cancelled-bg: rgba(122, 114, 104, 0.15);
 
-  --chart-1: #c2652a;
-  --chart-2: #8c3c3c;
-  --chart-3: #6b5344;
-  --chart-4: #5a6b32;
-  --chart-5: #8a6914;
+  --chart-1: #e64040;
+  --chart-2: #e66140;
+  --chart-3: #34d399;
+  --chart-4: #059669;
+  --chart-5: #ef4444;
 }
 
-/* Ember — Sahara at night */
 .dark {
-  --shadow-soft: 0 2px 16px rgba(0, 0, 0, 0.2);
+  --radius: 0.5rem;
+  --font-serif: "Manrope Variable", system-ui, sans-serif;
+  --font-ui: "Manrope Variable", system-ui, sans-serif;
+  --shadow-soft: none;
 
-  --background: #1e1814;
-  --foreground: #faf5ee;
-  --card: #2a2420;
-  --card-foreground: #faf5ee;
-  --popover: #2a2420;
-  --popover-foreground: #faf5ee;
-  --primary: #d4763f;
-  --primary-foreground: #1e1814;
-  --secondary: #352e28;
-  --secondary-foreground: #e8dfd4;
-  --muted: #352e28;
-  --muted-foreground: #a89e92;
-  --accent: #a85555;
-  --accent-foreground: #faf5ee;
-  --destructive: #c45c5c;
-  --border: rgba(216, 208, 200, 0.12);
-  --input: rgba(216, 208, 200, 0.18);
-  --ring: #d4763f;
+  --background: #282828;
+  --foreground: #ffffff;
+  --card: #2c2c2c;
+  --card-foreground: #ffffff;
+  --popover: #2c2c2c;
+  --popover-foreground: #ffffff;
+  --primary: #e64040;
+  --primary-foreground: #ffffff;
+  --secondary: #383838;
+  --secondary-foreground: #ffffff;
+  --muted: #383838;
+  --muted-foreground: rgba(255, 255, 255, 0.7);
+  --accent: #e66140;
+  --accent-foreground: #ffffff;
+  --destructive: #ef4444;
+  --border: #373737;
+  --input: #373737;
+  --ring: #e66140;
 
-  --status-open: #d4a84b;
-  --status-open-bg: rgba(212, 168, 75, 0.12);
-  --status-matched: #c4a088;
-  --status-matched-bg: rgba(196, 160, 136, 0.12);
-  --status-settled: #9aad6e;
-  --status-settled-bg: rgba(154, 173, 110, 0.12);
-  --status-cancelled: #9a9288;
-  --status-cancelled-bg: rgba(154, 146, 136, 0.12);
+  --status-open: #e64d40;
+  --status-open-bg: rgba(230, 77, 64, 0.15);
+  --status-matched: #34d399;
+  --status-matched-bg: rgba(52, 211, 153, 0.15);
+  --status-settled: #059669;
+  --status-settled-bg: rgba(5, 150, 105, 0.15);
+  --status-cancelled: #7a7268;
+  --status-cancelled-bg: rgba(122, 114, 104, 0.15);
 
-  --chart-1: #d4763f;
-  --chart-2: #a85555;
-  --chart-3: #c4a088;
-  --chart-4: #9aad6e;
-  --chart-5: #d4a84b;
+  --chart-1: #e64040;
+  --chart-2: #e66140;
+  --chart-3: #34d399;
+  --chart-4: #059669;
+  --chart-5: #ef4444;
 }
 
 @layer base {
   * {
     @apply border-border outline-ring/50;
   }
+
   body {
     @apply antialiased bg-background text-foreground;
   }
+
   html {
     @apply font-sans;
   }
+
   h1,
   h2,
   h3 {
@@ -152,15 +154,18 @@
   .font-heading {
     font-family: var(--font-serif);
   }
+
   .shadow-sahara {
     box-shadow: var(--shadow-soft);
   }
+
   .tabular-nums {
     font-variant-numeric: tabular-nums;
   }
 }
 
 @media (prefers-reduced-motion: reduce) {
+
   *,
   *::before,
   *::after {
@@ -169,4 +174,72 @@
     transition-duration: 0.01ms !important;
     scroll-behavior: auto !important;
   }
+}
+
+/* ── Matchlock chain-link stroke-draw loader ──────────── */
+
+/*
+ * Two-phase animation per link:
+ *   Phase 1 (0-40%):  stroke draws in via dashoffset 1→0, fill stays invisible
+ *   Phase 2 (40-55%): fill fades in, stroke fades out
+ *   Hold    (55-80%): fully visible, solid fill
+ *   Phase 3 (80-100%): fade everything out for loop reset
+ *
+ * Total cycle: 3.6s.  Each link is delayed by 0.7s so they cascade.
+ */
+
+@keyframes chain-draw {
+  0% {
+    stroke-dashoffset: 1;
+    stroke-opacity: 1;
+    fill-opacity: 0;
+  }
+
+  40% {
+    stroke-dashoffset: 0;
+    stroke-opacity: 1;
+    fill-opacity: 0;
+  }
+
+  55% {
+    stroke-dashoffset: 0;
+    stroke-opacity: 0;
+    fill-opacity: 1;
+  }
+
+  80% {
+    stroke-dashoffset: 0;
+    stroke-opacity: 0;
+    fill-opacity: 1;
+  }
+
+  100% {
+    stroke-dashoffset: 0;
+    stroke-opacity: 0;
+    fill-opacity: 0;
+  }
+}
+
+.chain-draw-link-1,
+.chain-draw-link-2,
+.chain-draw-link-3 {
+  stroke-dasharray: 1;
+  stroke-dashoffset: 1;
+  fill-opacity: 0;
+  stroke-opacity: 0;
+}
+
+.chain-draw-link-1 {
+  animation: chain-draw 3.6s ease-in-out infinite;
+  animation-delay: 0s;
+}
+
+.chain-draw-link-2 {
+  animation: chain-draw 3.6s ease-in-out infinite;
+  animation-delay: 0.7s;
+}
+
+.chain-draw-link-3 {
+  animation: chain-draw 3.6s ease-in-out infinite;
+  animation-delay: 1.4s;
 }
