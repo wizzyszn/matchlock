@@ -2,11 +2,14 @@ import { NavLink } from "react-router-dom";
 import type { ReactNode } from "react";
 
 import { PoweredByTxLine } from "@/components/brand/powered-by-txline";
+import logoUrl from "@/assets/g17.svg";
 import { UserAccountMenu } from "@/components/auth/user-account-menu";
 import { ClusterBadge } from "@/components/wallet/ClusterBadge";
+import { WalletConnectWarningBanner } from "@/components/wallet/wallet-connect-warning-banner";
 import { Badge } from "@/components/ui/badge";
 import { useHealthQuery } from "@/hooks/queries/use-health";
 import { cn } from "@/lib/utils";
+import { buttonVariants } from "@/components/ui/button";
 
 const NAV_ITEMS = [
   { to: "/markets", label: "Markets" },
@@ -15,6 +18,7 @@ const NAV_ITEMS = [
   { to: "/my-wagers", label: "My wagers" },
   { to: "/history", label: "History" },
   { to: "/invites", label: "Challenges" },
+  { to: "/leaderboard", label: "Leaderboard" },
   { to: "/profile", label: "Profile" },
 ] as const;
 
@@ -51,9 +55,10 @@ export function AppShell({ children }: AppShellProps) {
           <div className="flex min-w-0 items-center gap-2 sm:gap-3">
             <NavLink
               to="/markets"
-              className="font-heading shrink-0 text-xl tracking-tight hover:text-primary sm:text-2xl"
+              className="font-heading shrink-0 flex items-center gap-2 text-xl tracking-tight hover:text-primary sm:text-2xl"
             >
-              Matchlock
+              <img src={logoUrl} alt="" className="h-6 w-auto object-contain" />
+              <span>Matchlock</span>
             </NavLink>
             <div className="hidden items-center gap-2 sm:flex">
               <ClusterBadge />
@@ -80,12 +85,12 @@ export function AppShell({ children }: AppShellProps) {
                 <NavLink
                   to={to}
                   className={({ isActive }) =>
-                    cn(
-                      "inline-flex min-h-9 items-center rounded-full border px-4 text-sm font-medium transition-colors",
-                      isActive
-                        ? "border-primary bg-primary text-primary-foreground"
-                        : "border-border bg-card text-foreground hover:bg-muted",
-                    )
+                    isActive
+                      ? cn(
+                          buttonVariants({ variant: "default" }),
+                          "rounded-full px-4",
+                        )
+                      : "inline-flex min-h-9 items-center rounded-full border border-border bg-card px-4 text-sm font-medium text-foreground transition-colors hover:bg-muted"
                   }
                 >
                   {label}
@@ -94,6 +99,8 @@ export function AppShell({ children }: AppShellProps) {
             ))}
           </ul>
         </nav>
+
+        <WalletConnectWarningBanner />
       </header>
 
       <main className="flex-1 mx-auto max-w-5xl px-4 py-8 sm:py-12 w-full">{children}</main>

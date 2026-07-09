@@ -1,9 +1,10 @@
 import { Loader2, Swords, Trophy } from 'lucide-react'
-import { useEffect, useMemo, useState } from 'react'
+import { memo, useEffect, useMemo, useState } from 'react'
 
 import { Button } from '@/components/ui/button'
 import { ChallengeSlipDialog } from '@/components/wager/challenge-slip'
 import { TeamRow } from '@/components/wager/team-row'
+import { useMediaQuery } from '@/hooks/use-media-query'
 import { useMatchesQuery } from '@/hooks/queries/use-matches'
 import type { Match, Side } from '@/lib/api'
 import {
@@ -78,7 +79,7 @@ function OddsCell({
   )
 }
 
-function MatchRow({
+const MemoMatchRow = memo(function MatchRow({
   match,
   showOdds,
   onChallenge,
@@ -203,9 +204,114 @@ function MatchRow({
       </td>
     </tr>
   )
-}
+})
 
-function CompetitionSection({
+const MemoMatchCard = memo(function MatchCard({
+  match,
+  showOdds,
+  onChallenge,
+}: {
+  match: Match
+  showOdds: boolean
+  onChallenge?: (match: Match, side: Side) => void
+}) {
+  const labels = matchLabels(match)
+  const scores = matchScores(match)
+  const phase = classifyMatch(match)
+  const isLive = phase === 'live'
+  const canChallenge = phase === 'upcoming' || phase === 'live'
+  const odds = match.odds
+  const homeOdds = odds?.home ?? null
+  const drawOdds = odds?.draw ?? null
+  const awayOdds = odds?.away ?? null
+  const lowestOdd =
+    homeOdds != null && drawOdds != null && awayOdds != null
+      ? Math.min(homeOdds, drawOdds, awayOdds)
+      : null
+
+  return (
+    <li className="border-b border-border/60 last:border-b-0">
+      <div className="flex items-center gap-3 px-3 py-3">
+        <div className="min-w-0 flex-1">
+          <div className="flex items-baseline justify-between">
+            <div className="flex items-baseline gap-2">
+              <span className="text-xs font-medium text-foreground tabular-nums">
+                {formatKickoffClock(match)}
+              </span>
+              <span className="text-[10px] font-medium tracking-wide text-muted-foreground uppercase">
+                {formatKickoffDate(match)}
+              </span>
+            </div>
+            <span
+              className={cn(
+                'text-xs font-medium',
+                match.is_final
+                  ? 'text-muted-foreground'
+                  : isLive
+                    ? 'text-status-open'
+                    : 'text-muted-foreground',
+              )}
+            >
+              {formatStatusShort(match)}
+            </span>
+          </div>
+          <div className="mt-2 flex items-center gap-3">
+            <div className="flex flex-1 flex-col gap-1.5">
+              <TeamRow name={labels.homeTeam} flagSize="sm" />
+              <TeamRow name={labels.awayTeam} flagSize="sm" />
+            </div>
+            {scores.hasScore ? (
+              <div className="flex flex-col items-center gap-1 tabular-nums">
+                <span className="text-lg font-semibold leading-none text-foreground">
+                  {scores.home}
+                </span>
+                <span className="text-lg font-semibold leading-none text-foreground">
+                  {scores.away}
+                </span>
+              </div>
+            ) : null}
+          </div>
+        </div>
+
+        {showOdds && canChallenge ? (
+          <div className="flex shrink-0 items-center gap-1.5 self-center">
+            <OddsCell
+              label="1"
+              value={formatOdds(homeOdds)}
+              highlighted={lowestOdd != null && homeOdds === lowestOdd}
+              onSelect={() => onChallenge?.(match, 'home')}
+            />
+            <OddsCell
+              label="X"
+              value={formatOdds(drawOdds)}
+              highlighted={lowestOdd != null && drawOdds === lowestOdd}
+              onSelect={() => onChallenge?.(match, 'draw')}
+            />
+            <OddsCell
+              label="2"
+              value={formatOdds(awayOdds)}
+              highlighted={lowestOdd != null && awayOdds === lowestOdd}
+              onSelect={() => onChallenge?.(match, 'away')}
+            />
+          </div>
+        ) : canChallenge ? (
+          <Button
+            type="button"
+            variant="ghost"
+            size="icon"
+            className="size-10 shrink-0 text-muted-foreground hover:text-primary"
+            aria-label={`Challenge ${labels.homeTeam} vs ${labels.awayTeam}`}
+            onClick={() => onChallenge?.(match, 'home')}
+          >
+            <Swords className="size-4" aria-hidden />
+          </Button>
+        ) : null}
+      </div>
+    </li>
+  )
+})
+
+function DesktopCompetitionSection({
   competition,
   matches,
   showOdds,
@@ -229,7 +335,6 @@ function CompetitionSection({
           </p>
         </div>
       </div>
-
       <div className="overflow-x-auto">
         <table className="w-full min-w-lg border-collapse text-sm">
           <caption className="sr-only">{competition} fixtures</caption>
@@ -256,7 +361,7 @@ function CompetitionSection({
           </thead>
           <tbody>
             {matches.map((match) => (
-              <MatchRow
+              <MemoMatchRow
                 key={match.match_id}
                 match={match}
                 showOdds={showOdds}
@@ -270,8 +375,47 @@ function CompetitionSection({
   )
 }
 
+function MobileCompetitionSection({
+  competition,
+  matches,
+  showOdds,
+  onChallenge,
+}: {
+  competition: string
+  matches: Match[]
+  showOdds: boolean
+  onChallenge?: (match: Match, side: Side) => void
+}) {
+  return (
+    <div className="overflow-hidden rounded-lg border border-border bg-card shadow-sahara">
+      <div className="flex items-center gap-2 border-b border-border bg-muted/40 px-4 py-3">
+        <Trophy className="size-4 shrink-0 text-primary" aria-hidden />
+        <div className="min-w-0">
+          <h3 className="truncate font-heading text-lg leading-tight text-foreground">
+            {competition}
+          </h3>
+          <p className="text-xs text-muted-foreground">
+            {matches.length} {matches.length === 1 ? 'fixture' : 'fixtures'}
+          </p>
+        </div>
+      </div>
+      <ul className="divide-y divide-border/60">
+        {matches.map((match) => (
+          <MemoMatchCard
+            key={match.match_id}
+            match={match}
+            showOdds={showOdds}
+            onChallenge={onChallenge}
+          />
+        ))}
+      </ul>
+    </div>
+  )
+}
+
 export function MatchTable() {
   const { data: matches, isLoading, isError, error } = useMatchesQuery()
+  const isDesktop = useMediaQuery('(min-width: 40rem)')
   const [activeFilter, setActiveFilter] = useState<MatchFilter>('live')
   const [filterTouched, setFilterTouched] = useState(false)
   const [showOdds, setShowOdds] = useState(true)
@@ -329,6 +473,8 @@ export function MatchTable() {
       </p>
     )
   }
+
+  const SectionComponent = isDesktop ? DesktopCompetitionSection : MobileCompetitionSection
 
   return (
     <div className="space-y-4">
@@ -409,7 +555,7 @@ export function MatchTable() {
       ) : (
         <div className="space-y-4">
           {groups.map((group) => (
-            <CompetitionSection
+            <SectionComponent
               key={group.competition}
               competition={group.competition}
               matches={group.matches}

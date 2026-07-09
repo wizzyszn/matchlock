@@ -112,6 +112,19 @@ export type UserLookup = {
   primary_wallet?: string
 }
 
+export type LeaderboardEntry = {
+  rank: number
+  user_id: string
+  email: string
+  display_name?: string
+  total_wagers: number
+  wins: number
+  losses: number
+  win_rate: number
+  total_volume: number
+  net_pnl: number
+}
+
 export type WagerInvite = {
   id: string
   maker_email: string
@@ -356,6 +369,24 @@ export class MatchlockApi {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ status }),
       },
+    )
+  }
+
+  getLeaderboard(limit = 20) {
+    return this.request<LeaderboardEntry[]>(
+      `/leaderboard?limit=${limit}`,
+    )
+  }
+
+  getMyLeaderboardRank() {
+    return this.request<LeaderboardEntry | { rank: null; total_wagers: 0 }>(
+      '/leaderboard/me',
+    )
+  }
+
+  getLeaderboardStats() {
+    return this.request<{ total_wagers: number; total_volume: number; total_users: number }>(
+      '/leaderboard/stats',
     )
   }
 

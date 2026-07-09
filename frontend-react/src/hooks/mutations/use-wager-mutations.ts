@@ -1,14 +1,16 @@
-import { useAnchorWallet, useConnection } from '@solana/wallet-adapter-react'
-import { useMutation, useQueryClient } from '@tanstack/react-query'
-import { PublicKey } from '@solana/web3.js'
+import { useAnchorWallet, useConnection } from "@solana/wallet-adapter-react";
+import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { PublicKey } from "@solana/web3.js";
 
-import { useConfig } from '@/hooks/use-api'
-import type { Side } from '@/lib/api'
-import { mapTransactionError } from '@/lib/errors'
-import { getProgram, getUsdcMint } from '@/lib/anchor'
+import { useConfig } from "@/hooks/use-api";
+import type { Side, Wager, WagerStatus, WagerSettlementStatus } from "@/lib/api";
+import { mapTransactionError } from "@/lib/errors";
+import { getProgram, getUsdcMint } from "@/lib/anchor";
+import { queryKeys } from "@/lib/query-keys";
 
-import { useApi } from '@/hooks/use-api'
-import { useWalletLinkStatus } from '@/hooks/use-wallet-link-status'
+import { useApi } from "@/hooks/use-api";
+import { useWalletLinkStatus } from "@/hooks/use-wallet-link-status";
+import { useOptimisticWagersStore } from "@/stores/optimistic-wagers-store";
 import {
   buildAcceptWagerTransaction,
   buildCancelWagerTransaction,
@@ -16,48 +18,81 @@ import {
   buildMakeWagerTransaction,
   sendTransaction,
   simulateTransaction,
-} from '@/lib/wager-tx'
+} from "@/lib/wager-tx";
 
-export type TxAction = 'make' | 'accept' | 'cancel' | 'claim'
+export type TxAction = "make" | "accept" | "cancel" | "claim";
 
 export function useWagerMutations() {
-  const { connection } = useConnection()
-  const wallet = useAnchorWallet()
-  const { canTransact, connected, needsLink, conflict } = useWalletLinkStatus()
-  const config = useConfig()
-  const api = useApi()
-  const queryClient = useQueryClient()
+  const { connection } = useConnection();
+  const wallet = useAnchorWallet();
+  const { canTransact, connected, needsLink, conflict } = useWalletLinkStatus();
+  const config = useConfig();
+  const api = useApi();
+  const queryClient = useQueryClient();
+  const optimisticWagers = useOptimisticWagersStore();
 
   const invalidateWagers = async () => {
-    await queryClient.invalidateQueries({ queryKey: ['wagers'] })
-    await queryClient.invalidateQueries({ queryKey: ['tokenBalance'] })
-  }
+    await queryClient.invalidateQueries({ queryKey: ["wagers"] });
+    await queryClient.invalidateQueries({ queryKey: ["tokenBalance"] });
+  };
+
+  const getCachedWager = (wagerPubkey: string) => {
+    const detail = queryClient.getQueryData<Wager>(
+      queryKeys.wagers.detail(wagerPubkey),
+    );
+    if (detail) {
+      return detail;
+    }
+
+    const listEntries = queryClient.getQueriesData<Wager[]>({ queryKey: ["wagers"] });
+    for (const [, wagers] of listEntries) {
+      const found = wagers?.find((wager) => wager.pubkey === wagerPubkey);
+      if (found) {
+        return found;
+      }
+    }
+
+    return null;
+  };
+
+  const updateWagerStatus = (wagerPubkey: string, status: WagerStatus) => {
+    queryClient.setQueriesData<Wager[]>({ queryKey: ["wagers"] }, (old) => {
+      if (!Array.isArray(old)) return old;
+      return old.map((w) => (w.pubkey === wagerPubkey ? { ...w, status } : w));
+    });
+    queryClient.setQueryData<Wager>(queryKeys.wagers.detail(wagerPubkey), (old) => {
+      if (!old) return old;
+      return { ...old, status };
+    });
+  };
 
   const makeWager = useMutation({
     mutationFn: async (input: {
-      matchId: string
-      stake: bigint
-      makerSide: Side
-      invitedTaker?: PublicKey
+      matchId: string;
+      stake: bigint;
+      makerSide: Side;
+      invitedTaker?: PublicKey;
     }) => {
       if (!wallet?.publicKey) {
-        throw new Error('Connect your wallet on Profile first.')
+        throw new Error("Connect your wallet on Profile first.");
       }
       if (conflict) {
         throw new Error(
-          'This wallet is linked to another Matchlock account. Switch wallet on Profile.',
-        )
+          "This wallet is linked to another Matchlock account. Switch wallet on Profile.",
+        );
       }
       if (needsLink) {
-        throw new Error('Link your connected wallet to your account on Profile.')
+        throw new Error(
+          "Link your connected wallet to your account on Profile.",
+        );
       }
-      const program = getProgram(connection, wallet)
-      const stablecoinMint = getUsdcMint(config)
-      const matchBytes = Buffer.from(input.matchId, 'utf8')
+      const program = getProgram(connection, wallet);
+      const stablecoinMint = getUsdcMint(config);
+      const matchBytes = Buffer.from(input.matchId, "utf8");
       const [wagerPubkey] = PublicKey.findProgramAddressSync(
-        [Buffer.from('wager'), wallet.publicKey.toBuffer(), matchBytes],
+        [Buffer.from("wager"), wallet.publicKey.toBuffer(), matchBytes],
         program.programId,
-      )
+      );
 
       const tx = await buildMakeWagerTransaction({
         program,
@@ -68,34 +103,56 @@ export function useWagerMutations() {
         makerSide: input.makerSide,
         stablecoinMint,
         invitedTaker: input.invitedTaker,
-      })
+      });
 
-      await simulateTransaction(connection, wallet, tx)
-      const signature = await sendTransaction(connection, wallet, tx)
-      return { signature, wagerPubkey: wagerPubkey.toBase58() }
+      await simulateTransaction(connection, wallet, tx);
+      const signature = await sendTransaction(connection, wallet, tx);
+      return {
+        signature,
+        wagerPubkey: wagerPubkey.toBase58(),
+        stake: Number(input.stake),
+        matchId: input.matchId,
+        makerSide: input.makerSide,
+        invitedTaker: input.invitedTaker?.toBase58(),
+        maker: wallet.publicKey.toBase58(),
+      };
     },
-    onSuccess: invalidateWagers,
-  })
+    onSuccess: (data) => {
+      optimisticWagers.upsert({
+        pubkey: data.wagerPubkey,
+        maker: data.maker,
+        invited_taker: data.invitedTaker,
+        taker: "11111111111111111111111111111111",
+        match_id: data.matchId,
+        maker_side: data.makerSide,
+        stake: data.stake,
+        status: "open",
+      });
+      void invalidateWagers();
+    },
+  });
 
   const acceptWager = useMutation({
     mutationFn: async (input: {
-      wagerPubkey: string
-      maker: string
-      takerSide: Side
+      wagerPubkey: string;
+      maker: string;
+      takerSide: Side;
     }) => {
       if (!wallet?.publicKey) {
-        throw new Error('Connect your wallet on Profile first.')
+        throw new Error("Connect your wallet on Profile first.");
       }
       if (conflict) {
         throw new Error(
-          'This wallet is linked to another Matchlock account. Switch wallet on Profile.',
-        )
+          "This wallet is linked to another Matchlock account. Switch wallet on Profile.",
+        );
       }
       if (needsLink) {
-        throw new Error('Link your connected wallet to your account on Profile.')
+        throw new Error(
+          "Link your connected wallet to your account on Profile.",
+        );
       }
-      const program = getProgram(connection, wallet)
-      const stablecoinMint = getUsdcMint(config)
+      const program = getProgram(connection, wallet);
+      const stablecoinMint = getUsdcMint(config);
 
       const tx = await buildAcceptWagerTransaction({
         program,
@@ -104,59 +161,97 @@ export function useWagerMutations() {
         maker: new PublicKey(input.maker),
         takerSide: input.takerSide,
         stablecoinMint,
-      })
+      });
 
-      await simulateTransaction(connection, wallet, tx)
-      return sendTransaction(connection, wallet, tx)
+      await simulateTransaction(connection, wallet, tx);
+      return sendTransaction(connection, wallet, tx);
     },
     onSuccess: invalidateWagers,
-  })
+  });
 
   const cancelWager = useMutation({
-    mutationFn: async (input: { wagerPubkey: string }) => {
+    mutationFn: async (input: { wagerPubkey: string; wager?: Wager }) => {
       if (!wallet?.publicKey) {
-        throw new Error('Connect your wallet on Profile first.')
+        throw new Error("Connect your wallet on Profile first.");
       }
       if (conflict) {
         throw new Error(
-          'This wallet is linked to another Matchlock account. Switch wallet on Profile.',
-        )
+          "This wallet is linked to another Matchlock account. Switch wallet on Profile.",
+        );
       }
       if (needsLink) {
-        throw new Error('Link your connected wallet to your account on Profile.')
+        throw new Error(
+          "Link your connected wallet to your account on Profile.",
+        );
       }
-      const program = getProgram(connection, wallet)
-      const stablecoinMint = getUsdcMint(config)
+      const program = getProgram(connection, wallet);
+      const stablecoinMint = getUsdcMint(config);
 
       const tx = await buildCancelWagerTransaction({
         program,
         wallet,
         wagerPubkey: new PublicKey(input.wagerPubkey),
         stablecoinMint,
-      })
+      });
 
-      await simulateTransaction(connection, wallet, tx)
-      return sendTransaction(connection, wallet, tx)
+      await simulateTransaction(connection, wallet, tx);
+      const signature = await sendTransaction(connection, wallet, tx);
+      return { signature, wagerPubkey: input.wagerPubkey };
     },
-    onSuccess: invalidateWagers,
-  })
+    onMutate: async (input) => {
+      await queryClient.cancelQueries({ queryKey: ["wagers"] });
+      const cachedWager = input.wager ?? getCachedWager(input.wagerPubkey);
+      if (cachedWager) {
+        optimisticWagers.markCancelled(cachedWager);
+        updateWagerStatus(input.wagerPubkey, "cancelled");
+      }
+      return { previousWager: cachedWager };
+    },
+    onSuccess: (data, input) => {
+      updateWagerStatus(data.wagerPubkey, "cancelled");
+      const cachedWager = input.wager ?? getCachedWager(data.wagerPubkey);
+      if (cachedWager) {
+        optimisticWagers.markCancelled(cachedWager);
+      }
+      invalidateWagers();
+    },
+    onError: (_error, input, context) => {
+      const previousWager = context?.previousWager ?? input.wager;
+      if (previousWager) {
+        optimisticWagers.upsert(previousWager);
+        queryClient.setQueryData(
+          queryKeys.wagers.detail(previousWager.pubkey),
+          previousWager,
+        );
+        queryClient.setQueriesData<Wager[]>({ queryKey: ["wagers"] }, (old) => {
+          if (!Array.isArray(old)) return old;
+          return old.map((wager) =>
+            wager.pubkey === previousWager.pubkey ? previousWager : wager,
+          );
+        });
+      }
+      void invalidateWagers();
+    },
+  });
 
   const claimWager = useMutation({
     mutationFn: async (input: { wagerPubkey: string }) => {
       if (!wallet?.publicKey) {
-        throw new Error('Connect your wallet on Profile first.')
+        throw new Error("Connect your wallet on Profile first.");
       }
       if (conflict) {
         throw new Error(
-          'This wallet is linked to another Matchlock account. Switch wallet on Profile.',
-        )
+          "This wallet is linked to another Matchlock account. Switch wallet on Profile.",
+        );
       }
       if (needsLink) {
-        throw new Error('Link your connected wallet to your account on Profile.')
+        throw new Error(
+          "Link your connected wallet to your account on Profile.",
+        );
       }
-      const proof = await api.getWagerSettlementProof(input.wagerPubkey)
-      const program = getProgram(connection, wallet)
-      const stablecoinMint = getUsdcMint(config)
+      const proof = await api.getWagerSettlementProof(input.wagerPubkey);
+      const program = getProgram(connection, wallet);
+      const stablecoinMint = getUsdcMint(config);
 
       const tx = await buildClaimWagerTransaction({
         program,
@@ -164,13 +259,24 @@ export function useWagerMutations() {
         wagerPubkey: new PublicKey(input.wagerPubkey),
         proof,
         stablecoinMint,
-      })
+      });
 
-      await simulateTransaction(connection, wallet, tx)
-      return sendTransaction(connection, wallet, tx)
+      await simulateTransaction(connection, wallet, tx);
+      const signature = await sendTransaction(connection, wallet, tx);
+      return { signature, wagerPubkey: input.wagerPubkey };
     },
-    onSuccess: invalidateWagers,
-  })
+    onSuccess: (data) => {
+      updateWagerStatus(data.wagerPubkey, "settled");
+      queryClient.setQueryData<WagerSettlementStatus>(
+        queryKeys.wagers.settlement(data.wagerPubkey),
+        (old) => {
+          if (!old) return old;
+          return { ...old, state: "settled", message: "Winnings have been sent" };
+        },
+      );
+      invalidateWagers();
+    },
+  });
 
   return {
     makeWager,
@@ -182,5 +288,5 @@ export function useWagerMutations() {
     walletConnected: connected,
     walletNeedsLink: needsLink,
     walletConflict: conflict,
-  }
+  };
 }

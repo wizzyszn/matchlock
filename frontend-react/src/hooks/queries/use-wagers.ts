@@ -3,6 +3,7 @@ import { useQuery } from '@tanstack/react-query'
 import { ApiClientError } from '@/lib/api'
 import { useApi } from '@/hooks/use-api'
 import { queryKeys, type WagerListParams } from '@/lib/query-keys'
+import { useOptimisticWagersStore } from '@/stores/optimistic-wagers-store'
 
 export function useWagersQuery(params: WagerListParams = {}) {
   const api = useApi()
@@ -33,6 +34,9 @@ export function useWagerSettlementQuery(pubkey: string | undefined) {
 
 export function useWagerQuery(pubkey: string | undefined) {
   const api = useApi()
+  const optimisticWager = useOptimisticWagersStore(
+    (state) => (pubkey ? state.wagers[pubkey]?.wager : undefined),
+  )
 
   return useQuery({
     queryKey: queryKeys.wagers.detail(pubkey ?? ''),
@@ -41,12 +45,16 @@ export function useWagerQuery(pubkey: string | undefined) {
         return await api.getWager(pubkey!)
       } catch (error) {
         if (error instanceof ApiClientError && error.status === 404) {
+          if (optimisticWager) {
+            return optimisticWager
+          }
           return null
         }
         throw error
       }
     },
     enabled: Boolean(pubkey),
+    initialData: optimisticWager,
     refetchInterval: (query) => {
       const wager = query.state.data
       if (wager === null) return false

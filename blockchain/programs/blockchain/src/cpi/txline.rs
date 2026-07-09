@@ -87,21 +87,25 @@ pub fn invoke_validate_stat<'info>(
 
     let ix = Instruction {
         program_id: *txline_program.key,
-        accounts: vec![AccountMeta::new_readonly(daily_scores_merkle_roots.key(), false)],
+        accounts: vec![AccountMeta::new_readonly(
+            daily_scores_merkle_roots.key(),
+            false,
+        )],
         data,
     };
 
     invoke(
         &ix,
-        &[
-            daily_scores_merkle_roots.clone(),
-            txline_program.clone(),
-        ],
+        &[daily_scores_merkle_roots.clone(), txline_program.clone()],
     )?;
 
     let validated = match get_return_data() {
         Some((program_id, return_data)) => {
-            require_keys_eq!(program_id, *txline_program.key, ErrorCode::InvalidTxlineProgram);
+            require_keys_eq!(
+                program_id,
+                *txline_program.key,
+                ErrorCode::InvalidTxlineProgram
+            );
             !return_data.is_empty() && return_data[0] != 0
         }
         None => false,

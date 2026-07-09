@@ -16,6 +16,7 @@ import (
 	"github.com/matchlock/backend-go/internal/db"
 	"github.com/matchlock/backend-go/internal/email"
 	"github.com/matchlock/backend-go/internal/keeper"
+	"github.com/matchlock/backend-go/internal/leaderboard"
 	applogger "github.com/matchlock/backend-go/internal/logger"
 	"github.com/matchlock/backend-go/internal/solana"
 	"github.com/matchlock/backend-go/internal/txline"
@@ -97,6 +98,8 @@ func main() {
 	authSvc.SetEmailQueue(emailQueue)
 	slog.Info("auth service ready", "frontend", cfg.FrontendURL)
 
+	lbService := leaderboard.NewService(gdb)
+
 	keeperKey, err := solana.LoadKeeperKeypairFromFile(cfg.KeeperKeypairPath)
 	if err != nil {
 		slog.Error("keeper keypair load failed", "err", err)
@@ -121,6 +124,7 @@ func main() {
 		AutoSettle:            cfg.KeeperAutoSettle,
 		MaxSettlementAttempts: cfg.MaxSettlementAttempts,
 		SettlementRetryBase:   cfg.SettlementRetryBase,
+		Leaderboard:           lbService,
 	}
 	if cfg.KeeperAutoSettle {
 		slog.Info("keeper auto-settle enabled")
@@ -176,14 +180,15 @@ func main() {
 		CORSOrigins:  cfg.CORSAllowedOrigins,
 		Logger:       zapLogger,
 	}, api.Dependencies{
-		Cache:    redisStore,
-		Solana:   solClient,
-		Wagers:   api.NewCachedWagerIndex(redisStore),
-		Txline:   txClient,
-		Auth:     authSvc,
-		Postgres: db.Probe{DB: gdb},
-		TokenCfg: tokenCfg,
-		MatchSub: redisStore,
+		Cache:       redisStore,
+		Solana:      solClient,
+		Leaderboard: lbService,
+		Wagers:      api.NewCachedWagerIndex(redisStore),
+		Txline:      txClient,
+		Auth:        authSvc,
+		Postgres:    db.Probe{DB: gdb},
+		TokenCfg:    tokenCfg,
+		MatchSub:    redisStore,
 	})
 
 	scheduleWorker := &keeper.ScheduleWorker{

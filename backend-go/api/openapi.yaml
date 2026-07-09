@@ -10,10 +10,10 @@ info:
     (default `http://localhost:5173`, `http://127.0.0.1:5173`).
 
     **On-chain writes** (`make_wager`, `accept_wager`, `cancel_wager`) are signed in the
-    browser wallet — this API is read-only.
+    browser wallet via the Solana program — this API is read-only for on-chain state.
 
     **Devnet defaults** (see `backend-go/.env`):
-    - Program: `Ak6UgR39nvhxHjLCEkMg18NprbchYgoabvbMigkRCbbi`
+    - Program: `VgsUt4Fjn6jqrqP7EuqvWJM3NqYufA2haNrP9fGGaYv`
     - Stablecoin mint: `ELWTKspHKCnCfCiCiqYw1EDH77k8VCP74dK9qytG2Ujh`
     - Cluster: `devnet`
 
@@ -30,6 +30,12 @@ tags:
     description: TxLINE fixture cache (SSE ingest)
   - name: wagers
     description: On-chain wager accounts (Solana RPC)
+  - name: settlement
+    description: Wager settlement status and proof
+  - name: auth
+    description: Email magic-link authentication and wallet binding
+  - name: challenges
+    description: Peer-to-peer challenge invites
 
 paths:
   /healthz:
@@ -37,7 +43,6 @@ paths:
       tags: [health]
       operationId: getHealthz
       summary: Liveness probe
-      description: Returns 200 when the HTTP server is running. Does not check dependencies.
       responses:
         "200":
           description: Server is alive
@@ -45,8 +50,6 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/HealthStatus"
-              example:
-                status: ok
 
   /readyz:
     get:
@@ -54,8 +57,8 @@ paths:
       operationId: getReadyz
       summary: Readiness probe
       description: |
-        Checks Redis, Solana RPC, and TxLINE API reachability. Returns 503 when any
-        dependency is unavailable.
+        Checks Redis, Solana RPC, TxLINE API, and PostgreSQL reachability.
+        Returns 503 when any dependency is unavailable.
       responses:
         "200":
           description: All dependencies healthy
@@ -63,12 +66,6 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ReadyStatus"
-              example:
-                status: ready
-                checks:
-                  redis: ok
-                  rpc: ok
-                  txline: ok
         "503":
           description: One or more dependencies failed
           content:
@@ -92,28 +89,43 @@ paths:
               schema:
                 type: array
                 items:
-                  $ref: "#/components/schemas/Match"
-              example:
-                - match_id: "17952170"
-                  fixture_id: 17952170
-                  status: F2
-                  is_final: true
-                  home_goals: 2
-                  away_goals: 1
-                  seq: 941
-                  updated_at: "2026-07-01T10:00:00Z"
-                  finalized_at: "2026-07-01T10:05:00Z"
+                  $ref: "#/components/schemas/MatchView"
         "500":
           $ref: "#/components/responses/CacheError"
+
+  /matches/stream:
+    get:
+      tags: [matches]
+      operationId: matchStream
+      summary: SSE match update stream
+      description: |
+        Server-Sent Events stream of real-time match score updates.
+        Each event is a JSON-encoded `MatchView` payload.
+
+        A heartbeat comment (`:`) is sent every 15 seconds to keep the connection alive.
+      responses:
+        "200":
+          description: SSE event stream of match updates
+          content:
+            text/event-stream:
+              schema:
+                type: string
+                description: "`data: <MatchView>\\n\\n`"
+        "500":
+          description: SSE unavailable
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+              example:
+                error: match streaming not configured
+                code: SSE_UNAVAILABLE
 
   /matches/{id}:
     get:
       tags: [matches]
       operationId: getMatch
       summary: Get match by ID
-      description: |
-        `id` is the canonical match identifier — the decimal TxLINE `fixtureId` string
-        (same value used as `match_id` in on-chain wagers).
       parameters:
         - $ref: "#/components/parameters/MatchId"
       responses:
@@ -122,7 +134,7 @@ paths:
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/Match"
+                $ref: "#/components/schemas/MatchView"
         "400":
           $ref: "#/components/responses/InvalidMatchId"
         "404":
@@ -138,23 +150,12 @@ paths:
       description: |
         Scans Matchlock program accounts via Solana RPC with optional filters.
 
-        **Note:** The list endpoint only returns wagers in `open` or `matched` status.
-        Settled and cancelled accounts are omitted from list results (use `GET /wagers/{pubkey}`
-        for historical lookup when the account still exists).
+        When no `status` or `wallet` filter is supplied, only `open` and `matched` wagers
+        are returned (market browsing). Use `wallet` to query a user's full history.
       parameters:
-        - name: match_id
-          in: query
-          required: false
-          description: Filter by wager `match_id` (UTF-8 fixture id string)
-          schema:
-            type: string
-            example: "17952170"
-        - name: status
-          in: query
-          required: false
-          description: Filter by wager status
-          schema:
-            $ref: "#/components/schemas/WagerStatus"
+        - $ref: "#/components/parameters/MatchIdQuery"
+        - $ref: "#/components/parameters/StatusQuery"
+        - $ref: "#/components/parameters/WalletQuery"
       responses:
         "200":
           description: Wager list
@@ -163,15 +164,7 @@ paths:
               schema:
                 type: array
                 items:
-                  $ref: "#/components/schemas/Wager"
-              example:
-                - pubkey: "8fwJw3XMgFgvjar6oMY72zmfE1K1ycJhQRhSL5LEJMjK"
-                  maker: "2qtn5WqZhXxEpgVqJy1u2m9RjXDkWsP2NdGq9BmPQGRP"
-                  taker: "C35VqkQNy5ozpvPrben2u6YH8X9y3irLDGW6wRs5LVSk"
-                  match_id: "17952170"
-                  maker_side: home
-                  stake: 100000
-                  status: matched
+                  $ref: "#/components/schemas/WagerView"
         "400":
           $ref: "#/components/responses/InvalidQuery"
         "502":
@@ -190,13 +183,620 @@ paths:
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/Wager"
+                $ref: "#/components/schemas/WagerView"
         "400":
           $ref: "#/components/responses/InvalidPubkey"
         "404":
           $ref: "#/components/responses/WagerNotFound"
         "502":
           $ref: "#/components/responses/RpcError"
+
+  /wagers/{pubkey}/settlement:
+    get:
+      tags: [settlement]
+      operationId: getWagerSettlement
+      summary: Get settlement status for a matched wager
+      description: |
+        Returns the current settlement state of a matched wager. States include:
+        `match_live`, `match_ended_unverified`, `queued`, `retrying`, `settled`, `failed`,
+        and `not_applicable`.
+      parameters:
+        - $ref: "#/components/parameters/WagerPubkey"
+      responses:
+        "200":
+          description: Settlement status
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SettlementStatusView"
+        "400":
+          $ref: "#/components/responses/InvalidPubkey"
+        "502":
+          $ref: "#/components/responses/RpcError"
+
+  /wagers/{pubkey}/settlement-proof:
+    get:
+      tags: [settlement]
+      operationId: getWagerSettlementProof
+      summary: Build settlement proof for a matched wager
+      description: |
+        Builds the on-chain settlement proof data (Merkle proofs, stat validation) needed
+        by the winner's wallet to call `settle_wager` on the Matchlock program.
+      parameters:
+        - $ref: "#/components/parameters/WagerPubkey"
+      responses:
+        "200":
+          description: Settlement proof payload
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SettlementProof"
+        "400":
+          $ref: "#/components/responses/InvalidPubkey"
+        "404":
+          $ref: "#/components/responses/WagerNotFound"
+        "409":
+          description: Match not final or wager ineligible
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+              examples:
+                matchNotFinal:
+                  summary: Match is still live
+                  value:
+                    error: match is not final yet
+                    code: MATCH_NOT_FINAL
+                invalidStatus:
+                  summary: Wager not in matched state
+                  value:
+                    error: wager is not eligible for settlement
+                    code: INVALID_STATUS
+        "502":
+          $ref: "#/components/responses/RpcError"
+        "503":
+          description: Settlement proof service unavailable
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+              example:
+                error: settlement proof service unavailable
+                code: NOT_READY
+
+  /auth/magic-link:
+    post:
+      tags: [auth]
+      operationId: postMagicLink
+      summary: Request email magic-link
+      description: |
+        Sends a sign-in link to the given email address. If the email is not registered,
+        an account is created automatically (silent sign-up).
+
+        Rate-limited to 8 requests per hour per email.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/MagicLinkRequest"
+      responses:
+        "204":
+          description: Magic link sent (no content)
+        "400":
+          description: Invalid email
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+              example:
+                error: invalid email address
+                code: INVALID_EMAIL
+        "429":
+          description: Rate limited
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+              example:
+                error: please wait a minute before requesting another sign-in link (max 8 per hour)
+                code: RATE_LIMITED
+
+  /auth/verify:
+    get:
+      tags: [auth]
+      operationId: getVerifyMagicLink
+      summary: Verify magic-link token
+      description: |
+        Exchanges a magic-link token for an authenticated session. Sets `access_token`
+        and `refresh_token` HTTP-only cookies and returns the user profile.
+      parameters:
+        - $ref: "#/components/parameters/TokenQuery"
+      responses:
+        "200":
+          description: Session created
+          headers:
+            Set-Cookie:
+              description: access_token and refresh_token cookies
+              schema:
+                type: string
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/UserProfile"
+        "401":
+          description: Link expired or already used
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+              example:
+                error: link expired or already used
+                code: INVALID_TOKEN
+        "500":
+          description: Auth error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+              example:
+                error: could not verify login
+                code: AUTH_ERROR
+
+  /auth/refresh:
+    post:
+      tags: [auth]
+      operationId: postRefresh
+      summary: Refresh session token
+      description: |
+        Uses the `refresh_token` cookie to issue new access and refresh tokens.
+        Returns the user profile and sets new cookies.
+      responses:
+        "200":
+          description: Session refreshed
+          headers:
+            Set-Cookie:
+              description: New access_token and refresh_token cookies
+              schema:
+                type: string
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/UserProfile"
+        "401":
+          description: Expired or missing refresh token
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+              example:
+                error: session expired; sign in again
+                code: UNAUTHORIZED
+
+  /auth/logout:
+    post:
+      tags: [auth]
+      operationId: postLogout
+      summary: Logout
+      description: Clears auth cookies and invalidates the refresh token.
+      responses:
+        "204":
+          description: Logged out (no content)
+
+  /auth/me:
+    get:
+      tags: [auth]
+      operationId: getMe
+      summary: Get current user profile
+      description: Returns the authenticated user's profile and linked wallets.
+      responses:
+        "200":
+          description: User profile
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/UserProfile"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "500":
+          $ref: "#/components/responses/AuthError"
+    patch:
+      tags: [auth]
+      operationId: patchMe
+      summary: Update display name
+      description: Updates the authenticated user's public display name (3-32 chars, alphanumeric + underscore).
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateDisplayNameRequest"
+      responses:
+        "200":
+          description: Profile updated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/UserProfile"
+        "400":
+          description: Invalid display name
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+              example:
+                error: username must be 3-32 characters (letters, numbers, underscore)
+                code: INVALID_DISPLAY_NAME
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "500":
+          $ref: "#/components/responses/AuthError"
+
+  /auth/wallets/check:
+    get:
+      tags: [auth]
+      operationId: getWalletCheck
+      summary: Check wallet binding status
+      description: |
+        Checks whether a Solana wallet pubkey is unlinked, linked to the current user,
+        or owned by another account.
+      parameters:
+        - $ref: "#/components/parameters/PubkeyQuery"
+      responses:
+        "200":
+          description: Wallet binding status
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/WalletBindingView"
+        "400":
+          description: Invalid pubkey
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+              example:
+                error: pubkey required
+                code: INVALID_PUBKEY
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+
+  /auth/wallets/challenge:
+    post:
+      tags: [auth]
+      operationId: postWalletLinkChallenge
+      summary: Create wallet link challenge
+      description: |
+        Generates a sign-in message that the user's wallet must sign to prove ownership.
+        The returned message should be presented to the user's Solana wallet for signing.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/WalletLinkChallengeRequest"
+      responses:
+        "200":
+          description: Challenge message created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/WalletLinkChallengeResponse"
+        "400":
+          description: Challenge creation failed
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+              example:
+                error: invalid pubkey
+                code: CHALLENGE_FAILED
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "409":
+          description: Wallet already linked to another account
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+              example:
+                error: this wallet is already linked to another Matchlock account
+                code: WALLET_OWNED_BY_OTHER
+
+  /auth/wallets/link:
+    post:
+      tags: [auth]
+      operationId: postWalletLink
+      summary: Link a wallet to the user account
+      description: |
+        Completes wallet linking by providing the signed challenge message.
+        The signature proves ownership of the Solana wallet.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/WalletLinkRequest"
+      responses:
+        "200":
+          description: Wallet linked
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/WalletBindingView"
+        "400":
+          description: Wallet link failed
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+              example:
+                error: invalid signature
+                code: WALLET_LINK_FAILED
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "409":
+          description: Wallet already linked to another account
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+              example:
+                error: this wallet is already linked to another Matchlock account
+                code: WALLET_OWNED_BY_OTHER
+
+  /auth/wallets/{pubkey}/primary:
+    post:
+      tags: [auth]
+      operationId: postWalletPrimary
+      summary: Set primary wallet
+      description: Designates the specified linked wallet as the user's primary wallet.
+      parameters:
+        - $ref: "#/components/parameters/WagerPubkey"
+      responses:
+        "204":
+          description: Primary wallet updated (no content)
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          description: Wallet not linked
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+              example:
+                error: wallet not linked
+                code: WALLET_NOT_FOUND
+        "500":
+          $ref: "#/components/responses/AuthError"
+
+  /auth/wallets/{pubkey}:
+    delete:
+      tags: [auth]
+      operationId: deleteWallet
+      summary: Unlink a wallet
+      description: Removes the wallet link from the user's account.
+      parameters:
+        - $ref: "#/components/parameters/WagerPubkey"
+      responses:
+        "204":
+          description: Wallet unlinked (no content)
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          description: Wallet not linked
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+              example:
+                error: wallet not linked
+                code: WALLET_NOT_FOUND
+        "500":
+          $ref: "#/components/responses/AuthError"
+
+  /users/lookup:
+    get:
+      tags: [auth]
+      operationId: getUserLookup
+      summary: Lookup user by email
+      description: |
+        Resolves an email address to a user profile for challenge invitations.
+        Returns whether the user has an account and their primary wallet address.
+      parameters:
+        - $ref: "#/components/parameters/EmailQuery"
+      responses:
+        "200":
+          description: User lookup result
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/UserLookup"
+        "400":
+          description: Invalid email
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+              example:
+                error: invalid email address
+                code: INVALID_EMAIL
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+
+  /challenges/invites:
+    post:
+      tags: [challenges]
+      operationId: postChallengeInvite
+      summary: Create a challenge invite
+      description: |
+        Creates a peer-to-peer challenge invitation. The recipient receives an email
+        notification. The invite can optionally include an on-chain wager pubkey.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateInviteRequest"
+      responses:
+        "201":
+          description: Invite created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/InviteView"
+        "400":
+          description: Invalid invite
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+              example:
+                error: recipient cannot be yourself
+                code: INVALID_INVITE
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "500":
+          $ref: "#/components/responses/InviteError"
+    get:
+      tags: [challenges]
+      operationId: listChallengeInvites
+      summary: List challenge invites
+      description: |
+        Returns all invites sent to or created by the authenticated user.
+        Enriches each invite with on-chain wager status (accepted if matched/settled).
+      responses:
+        "200":
+          description: Invite list
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/InviteView"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "500":
+          $ref: "#/components/responses/InviteError"
+
+  /challenges/invites/{id}:
+    get:
+      tags: [challenges]
+      operationId: getChallengeInvite
+      summary: Get a challenge invite by ID
+      parameters:
+        - $ref: "#/components/parameters/InviteId"
+      responses:
+        "200":
+          description: Invite found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/InviteView"
+        "400":
+          description: Invalid invite id
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+              example:
+                error: invalid invite id
+                code: INVALID_ID
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "500":
+          $ref: "#/components/responses/InviteError"
+    patch:
+      tags: [challenges]
+      operationId: patchChallengeInvite
+      summary: Update invite status
+      description: |
+        Allows the recipient to accept or decline a challenge invite by updating its status.
+      parameters:
+        - $ref: "#/components/parameters/InviteId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateInviteStatusRequest"
+      responses:
+        "200":
+          description: Invite updated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/InviteView"
+        "400":
+          description: Invalid invite update
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+              example:
+                error: invite cannot be updated
+                code: INVALID_INVITE
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "500":
+          $ref: "#/components/responses/InviteError"
+
+  /challenges/invites/{id}/wager:
+    post:
+      tags: [challenges]
+      operationId: postChallengeInviteWager
+      summary: Attach wager to invite
+      description: |
+        Links an on-chain wager to a challenge invite. Only the maker (creator)
+        can attach the wager. The wager's maker wallet must belong to the authenticated user.
+      parameters:
+        - $ref: "#/components/parameters/InviteId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AttachWagerRequest"
+      responses:
+        "200":
+          description: Wager attached
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/InviteView"
+        "400":
+          description: Invalid wager or invite
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+              examples:
+                invalidWager:
+                  summary: Invalid wager pubkey
+                  value:
+                    error: invalid wager pubkey
+                    code: INVALID_WAGER
+                wagerNotFound:
+                  summary: Wager not on chain
+                  value:
+                    error: wager not found on chain
+                    code: WAGER_NOT_FOUND
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "500":
+          $ref: "#/components/responses/InviteError"
 
 components:
   parameters:
@@ -208,16 +808,74 @@ components:
       schema:
         type: string
         example: "17952170"
+    MatchIdQuery:
+      name: match_id
+      in: query
+      required: false
+      description: Filter by match fixture id
+      schema:
+        type: string
+        example: "17952170"
     WagerPubkey:
       name: pubkey
       in: path
       required: true
-      description: Base58-encoded Solana wager account public key
+      description: Base58-encoded Solana account pubkey
       schema:
         type: string
         example: "8fwJw3XMgFgvjar6oMY72zmfE1K1ycJhQRhSL5LEJMjK"
+    InviteId:
+      name: id
+      in: path
+      required: true
+      description: Challenge invite UUID
+      schema:
+        type: string
+        format: uuid
+        example: "a1b2c3d4-e5f6-7890-abcd-ef1234567890"
+    StatusQuery:
+      name: status
+      in: query
+      required: false
+      description: Filter by wager status
+      schema:
+        $ref: "#/components/schemas/WagerStatus"
+    WalletQuery:
+      name: wallet
+      in: query
+      required: false
+      description: Filter by wallet pubkey (returns full history for that wallet)
+      schema:
+        type: string
+        example: "2qtn5WqZhXxEpgVqJy1u2m9RjXDkWsP2NdGq9BmPQGRP"
+    PubkeyQuery:
+      name: pubkey
+      in: query
+      required: true
+      description: Base58-encoded Solana wallet pubkey to check
+      schema:
+        type: string
+        example: "2qtn5WqZhXxEpgVqJy1u2m9RjXDkWsP2NdGq9BmPQGRP"
+    EmailQuery:
+      name: email
+      in: query
+      required: true
+      description: Email address to look up
+      schema:
+        type: string
+        format: email
+        example: "alice@example.com"
+    TokenQuery:
+      name: token
+      in: query
+      required: true
+      description: Magic-link token
+      schema:
+        type: string
+        example: "mlink_abc123def456"
 
   schemas:
+    # ── Health ──
     HealthStatus:
       type: object
       required: [status]
@@ -235,6 +893,9 @@ components:
           enum: [ready]
         checks:
           $ref: "#/components/schemas/DependencyChecks"
+        pending_settlements:
+          type: integer
+          description: Number of wagers awaiting keeper settlement
 
     NotReadyStatus:
       type: object
@@ -258,15 +919,22 @@ components:
       properties:
         redis:
           type: string
-          description: `"ok"` or error message
+          description: ok or error message
         rpc:
           type: string
-          description: `"ok"` or error message
+          description: ok or error message
         txline:
           type: string
-          description: `"ok"` or error message
+          description: ok or error message
+        postgres:
+          type: string
+          description: ok or error message
+        settlement_queue:
+          type: string
+          description: ok or error message
 
-    Match:
+    # ── Matches ──
+    MatchView:
       type: object
       required:
         - match_id
@@ -282,13 +950,14 @@ components:
         fixture_id:
           type: integer
           format: int64
-          description: TxLINE fixture id
         status:
           type: string
-          description: TxLINE `gameState` (e.g. HT, F2, scheduled)
+          description: TxLINE gameState (e.g. HT, F2, scheduled)
         is_final:
           type: boolean
-          description: True when game reached a terminal state
+        final_source:
+          type: string
+          description: How finality was determined (e.g. txline, inferred)
         home_goals:
           type: integer
           format: int32
@@ -300,7 +969,7 @@ components:
         seq:
           type: integer
           format: int32
-          description: Latest observed TxLINE scores sequence number
+          description: Latest observed TxLINE sequence number
         updated_at:
           type: string
           format: date-time
@@ -311,13 +980,12 @@ components:
         start_time:
           type: integer
           format: int64
-          description: Kickoff time in epoch milliseconds (TxLINE StartTime)
+          description: Kickoff epoch ms
         competition_id:
           type: integer
           format: int32
         competition:
           type: string
-          description: Competition name from fixtures snapshot
         fixture_group_id:
           type: integer
           format: int32
@@ -338,20 +1006,25 @@ components:
           type: integer
           format: int32
         odds:
-          type: object
+          allOf:
+            - $ref: "#/components/schemas/MatchOddsView"
           nullable: true
-          properties:
-            home:
-              type: number
-              format: double
-            draw:
-              type: number
-              format: double
-            away:
-              type: number
-              format: double
 
-    Wager:
+    MatchOddsView:
+      type: object
+      properties:
+        home:
+          type: number
+          format: double
+        draw:
+          type: number
+          format: double
+        away:
+          type: number
+          format: double
+
+    # ── Wagers ──
+    WagerView:
       type: object
       required:
         - pubkey
@@ -368,13 +1041,18 @@ components:
         maker:
           type: string
           description: Maker wallet (base58)
+        invited_taker:
+          type: string
+          description: Designated taker wallet (base58), if any
         taker:
           type: string
           description: Taker wallet (base58); zero key when open
         match_id:
           type: string
-          description: Fixture id string baked into the wager PDA
+          description: Fixture id string
         maker_side:
+          $ref: "#/components/schemas/Side"
+        taker_side:
           $ref: "#/components/schemas/Side"
         stake:
           type: integer
@@ -392,6 +1070,310 @@ components:
       type: string
       enum: [open, matched, settled, cancelled]
 
+    # ── Settlement ──
+    SettlementStatusView:
+      type: object
+      required:
+        - state
+        - message
+        - match_final
+        - updated_at
+      properties:
+        state:
+          type: string
+          enum:
+            - match_live
+            - match_ended_unverified
+            - queued
+            - retrying
+            - settled
+            - failed
+            - not_applicable
+        message:
+          type: string
+          description: User-facing status message
+        match_final:
+          type: boolean
+        settled_at:
+          type: string
+          format: date-time
+          nullable: true
+        tx_signature:
+          type: string
+          description: On-chain settlement transaction signature
+        updated_at:
+          type: string
+          format: date-time
+
+    SettlementProof:
+      type: object
+      required:
+        - winning_side_code
+        - winning_side
+        - fixture_id
+        - seq
+        - stat_key
+        - validation
+        - merkle_root
+        - epoch_day
+        - daily_scores_pda
+        - txline_program_id
+      properties:
+        winning_side_code:
+          type: integer
+          description: Internal side code (0=home, 1=away)
+        winning_side:
+          type: string
+          description: home or away
+        fixture_id:
+          type: integer
+          format: int64
+        seq:
+          type: integer
+          format: int32
+        stat_key:
+          type: integer
+          format: uint32
+        validation:
+          type: object
+          description: TxLINE stat validation response with Merkle proofs
+        merkle_root:
+          type: string
+          description: Base64-encoded Merkle root
+        epoch_day:
+          type: integer
+          format: uint16
+        daily_scores_pda:
+          type: string
+          description: Derived PDA for daily scores account (base58)
+        txline_program_id:
+          type: string
+          description: TxLINE program id (base58)
+
+    # ── Auth ──
+    UserProfile:
+      type: object
+      required:
+        - id
+        - email
+        - wallets
+      properties:
+        id:
+          type: string
+          format: uuid
+        email:
+          type: string
+          format: email
+        display_name:
+          type: string
+        wallets:
+          type: array
+          items:
+            $ref: "#/components/schemas/WalletView"
+
+    WalletView:
+      type: object
+      required:
+        - pubkey
+        - is_primary
+        - linked_at
+      properties:
+        pubkey:
+          type: string
+        label:
+          type: string
+        is_primary:
+          type: boolean
+        linked_at:
+          type: string
+          format: date-time
+
+    WalletBindingView:
+      type: object
+      required:
+        - pubkey
+        - status
+        - linked_to_you
+        - owned_by_other
+      properties:
+        pubkey:
+          type: string
+        status:
+          $ref: "#/components/schemas/WalletBindingStatus"
+        owner_label:
+          type: string
+        owner_user_id:
+          type: string
+        linked_to_you:
+          type: boolean
+        owned_by_other:
+          type: boolean
+
+    WalletBindingStatus:
+      type: string
+      enum: [unlinked, linked_to_you, linked_to_other]
+
+    UserLookup:
+      type: object
+      required:
+        - email
+        - has_account
+      properties:
+        email:
+          type: string
+          format: email
+        user_id:
+          type: string
+          format: uuid
+        has_account:
+          type: boolean
+        primary_wallet:
+          type: string
+          description: Primary linked wallet pubkey, if any
+
+    # ── Challenges ──
+    InviteView:
+      type: object
+      required:
+        - id
+        - maker_email
+        - recipient_email
+        - match_id
+        - maker_side
+        - stake
+        - status
+        - created_at
+      properties:
+        id:
+          type: string
+          format: uuid
+        maker_email:
+          type: string
+          format: email
+        recipient_email:
+          type: string
+          format: email
+        wager_pubkey:
+          type: string
+          description: Attached on-chain wager pubkey
+        match_id:
+          type: string
+        maker_side:
+          $ref: "#/components/schemas/Side"
+        stake:
+          type: integer
+          format: int64
+        home_team:
+          type: string
+        away_team:
+          type: string
+        status:
+          type: string
+          description: Invite status (pending, accepted, declined, etc.)
+        created_at:
+          type: string
+          format: date-time
+
+    # ── Request Bodies ──
+    MagicLinkRequest:
+      type: object
+      required: [email]
+      properties:
+        email:
+          type: string
+          format: email
+          example: alice@example.com
+
+    UpdateDisplayNameRequest:
+      type: object
+      required: [display_name]
+      properties:
+        display_name:
+          type: string
+          minLength: 3
+          maxLength: 32
+          pattern: "^[a-zA-Z0-9_]+$"
+          example: "alice99"
+
+    WalletLinkChallengeRequest:
+      type: object
+      required: [pubkey]
+      properties:
+        pubkey:
+          type: string
+          example: "2qtn5WqZhXxEpgVqJy1u2m9RjXDkWsP2NdGq9BmPQGRP"
+
+    WalletLinkChallengeResponse:
+      type: object
+      required: [message, pubkey]
+      properties:
+        message:
+          type: string
+          description: Message to sign with the wallet
+        pubkey:
+          type: string
+
+    WalletLinkRequest:
+      type: object
+      required: [pubkey, message, signature]
+      properties:
+        pubkey:
+          type: string
+        message:
+          type: string
+          description: The challenge message that was signed
+        signature:
+          type: string
+          description: Base58-encoded wallet signature
+        label:
+          type: string
+          description: Optional human-readable label for the wallet
+
+    CreateInviteRequest:
+      type: object
+      required: [recipient_email, match_id, maker_side, stake]
+      properties:
+        recipient_email:
+          type: string
+          format: email
+          example: bob@example.com
+        wager_pubkey:
+          type: string
+          description: Optional on-chain wager pubkey to pre-attach
+          example: "8fwJw3XMgFgvjar6oMY72zmfE1K1ycJhQRhSL5LEJMjK"
+        match_id:
+          type: string
+          example: "17952170"
+        maker_side:
+          $ref: "#/components/schemas/Side"
+        stake:
+          type: integer
+          format: int64
+          description: Stake per side in stablecoin smallest units
+          example: 100000
+        home_team:
+          type: string
+        away_team:
+          type: string
+
+    UpdateInviteStatusRequest:
+      type: object
+      required: [status]
+      properties:
+        status:
+          type: string
+          description: New invite status (e.g. accepted, declined)
+          example: accepted
+
+    AttachWagerRequest:
+      type: object
+      required: [wager_pubkey]
+      properties:
+        wager_pubkey:
+          type: string
+          example: "8fwJw3XMgFgvjar6oMY72zmfE1K1ycJhQRhSL5LEJMjK"
+
+    # ── Error ──
     Error:
       type: object
       required: [error, code]
@@ -402,15 +1384,6 @@ components:
         code:
           type: string
           description: Machine-readable error code
-          enum:
-            - CACHE_ERROR
-            - RPC_ERROR
-            - NOT_READY
-            - INVALID_MATCH_ID
-            - MATCH_NOT_FOUND
-            - INVALID_PUBKEY
-            - WAGER_NOT_FOUND
-            - INVALID_QUERY
 
   responses:
     CacheError:
@@ -450,7 +1423,7 @@ components:
             error: match not found
             code: MATCH_NOT_FOUND
     InvalidPubkey:
-      description: Invalid wager pubkey
+      description: Invalid or missing wager pubkey
       content:
         application/json:
           schema:
@@ -476,3 +1449,57 @@ components:
           example:
             error: status must be open, matched, settled, or cancelled
             code: INVALID_QUERY
+    InvalidJson:
+      description: Invalid JSON in request body
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
+          example:
+            error: invalid request body
+            code: INVALID_JSON
+    Unauthorized:
+      description: Authentication required
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
+          example:
+            error: sign in required
+            code: UNAUTHORIZED
+    Forbidden:
+      description: Not allowed to access this resource
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
+          example:
+            error: not allowed to view this invite
+            code: FORBIDDEN
+    NotFound:
+      description: Resource not found
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
+          example:
+            error: invite not found
+            code: NOT_FOUND
+    AuthError:
+      description: Internal auth service error
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
+          example:
+            error: could not load profile
+            code: AUTH_ERROR
+    InviteError:
+      description: Invite service error
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
+          example:
+            error: could not create invite
+            code: INVITE_ERROR

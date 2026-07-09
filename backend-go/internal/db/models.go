@@ -109,17 +109,17 @@ const (
 
 // WagerInvite notifies a user about a direct challenge (optionally before on-chain wager).
 type WagerInvite struct {
-	ID              uuid.UUID          `gorm:"type:uuid;primaryKey"`
-	MakerUserID     uuid.UUID          `gorm:"type:uuid;index;not null"`
-	RecipientEmail  string             `gorm:"index;size:320"`
-	RecipientUserID *uuid.UUID         `gorm:"type:uuid;index"`
-	WagerPubkey     string             `gorm:"size:44;index"`
-	MatchID         string             `gorm:"size:64;not null"`
-	MakerSide       string             `gorm:"size:8;not null"`
-	Stake           uint64             `gorm:"not null"`
-	HomeTeam        string             `gorm:"size:120"`
-	AwayTeam        string             `gorm:"size:120"`
-	Status          WagerInviteStatus  `gorm:"size:16;index;not null;default:pending"`
+	ID              uuid.UUID         `gorm:"type:uuid;primaryKey"`
+	MakerUserID     uuid.UUID         `gorm:"type:uuid;index;not null"`
+	RecipientEmail  string            `gorm:"index;size:320"`
+	RecipientUserID *uuid.UUID        `gorm:"type:uuid;index"`
+	WagerPubkey     string            `gorm:"size:44;index"`
+	MatchID         string            `gorm:"size:64;not null"`
+	MakerSide       string            `gorm:"size:8;not null"`
+	Stake           uint64            `gorm:"not null"`
+	HomeTeam        string            `gorm:"size:120"`
+	AwayTeam        string            `gorm:"size:120"`
+	Status          WagerInviteStatus `gorm:"size:16;index;not null;default:pending"`
 	CreatedAt       time.Time
 	UpdatedAt       time.Time
 	Maker           User `gorm:"foreignKey:MakerUserID;constraint:OnDelete:CASCADE"`
@@ -130,4 +130,27 @@ func (w *WagerInvite) BeforeCreate(tx *gorm.DB) error {
 		w.ID = uuid.New()
 	}
 	return nil
+}
+
+type LeaderboardEntry struct {
+	UserID      uuid.UUID `gorm:"type:uuid;primaryKey"`
+	Email       string    `gorm:"size:320;not null"`
+	DisplayName string    `gorm:"size:120"`
+	TotalWagers int64     `gorm:"not null;default:0"`
+	Wins        int64     `gorm:"not null;default:0"`
+	Losses      int64     `gorm:"not null;default:0"`
+	TotalVolume uint64    `gorm:"not null;default:0"`
+	NetPnL      int64     `gorm:"column:net_pnl;not null;default:0"`
+	UpdatedAt   time.Time
+}
+
+func (l *LeaderboardEntry) BeforeCreate(tx *gorm.DB) error {
+	return nil
+}
+
+func (l LeaderboardEntry) WinRate() float64 {
+	if l.TotalWagers == 0 {
+		return 0
+	}
+	return float64(l.Wins) / float64(l.TotalWagers) * 100
 }

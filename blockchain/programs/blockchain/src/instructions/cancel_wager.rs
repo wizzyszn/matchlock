@@ -67,12 +67,7 @@ pub fn handle_cancel_wager(ctx: Context<CancelWager>) -> Result<()> {
     let match_id = wager.match_id;
     let match_id_slice = &match_id[..match_id_len as usize];
 
-    let seeds = &[
-        WAGER_SEED,
-        maker.as_ref(),
-        match_id_slice,
-        &[bump],
-    ];
+    let seeds = &[WAGER_SEED, maker.as_ref(), match_id_slice, &[bump]];
     let signer = &[&seeds[..]];
 
     let cpi_accounts = TransferChecked {
@@ -81,11 +76,8 @@ pub fn handle_cancel_wager(ctx: Context<CancelWager>) -> Result<()> {
         to: ctx.accounts.maker_stablecoin.to_account_info(),
         authority: ctx.accounts.wager.to_account_info(),
     };
-    let cpi_ctx = CpiContext::new_with_signer(
-        ctx.accounts.token_program.key(),
-        cpi_accounts,
-        signer,
-    );
+    let cpi_ctx =
+        CpiContext::new_with_signer(ctx.accounts.token_program.key(), cpi_accounts, signer);
     token::transfer_checked(cpi_ctx, stake_amount, decimals)?;
 
     let close_accounts = CloseAccount {
@@ -93,11 +85,8 @@ pub fn handle_cancel_wager(ctx: Context<CancelWager>) -> Result<()> {
         destination: ctx.accounts.maker.to_account_info(),
         authority: ctx.accounts.wager.to_account_info(),
     };
-    let close_ctx = CpiContext::new_with_signer(
-        ctx.accounts.token_program.key(),
-        close_accounts,
-        signer,
-    );
+    let close_ctx =
+        CpiContext::new_with_signer(ctx.accounts.token_program.key(), close_accounts, signer);
     token::close_account(close_ctx)?;
 
     let wager = &mut ctx.accounts.wager;
