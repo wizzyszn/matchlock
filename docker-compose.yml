@@ -1,0 +1,74 @@
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: matchlock-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: matchlock
+      POSTGRES_PASSWORD: matchlock
+      POSTGRES_DB: matchlock
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U matchlock"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  redis:
+    image: redis:7-alpine
+    container_name: matchlock-redis
+    restart: unless-stopped
+    ports:
+      - "6379:6379"
+    volumes:
+      - redisdata:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  backend:
+    build:
+      context: ./backend-go
+      dockerfile: Dockerfile
+    container_name: matchlock-backend
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    env_file:
+      - ./backend-go/.env
+    environment:
+      DATABASE_URL: postgres://matchlock:matchlock@postgres:5432/matchlock?sslmode=disable
+      REDIS_URL: redis://redis:6379/0
+      HTTP_ADDR: ":8080"
+      FRONTEND_URL: http://localhost:3000
+      CORS_ALLOWED_ORIGINS: http://localhost:3000,http://127.0.0.1:3000
+    volumes:
+      - ./backend-go/keys:/app/keys:ro
+    ports:
+      - "8080:8080"
+
+  frontend:
+    build:
+      context: ./frontend-react
+      dockerfile: Dockerfile
+      args:
+        VITE_API_URL: http://localhost:8080
+    container_name: matchlock-frontend
+    restart: unless-stopped
+    depends_on:
+      - backend
+    ports:
+      - "3000:80"
+
+volumes:
+  pgdata:
+  redisdata:

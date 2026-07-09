@@ -1,0 +1,19 @@
+# Secrets — injected at runtime via compose env_file / environment
+.env
+.env.*
+!.env.example
+
+# Local Postgres data dir (never belongs in an image)
+pgdata/
+
+# Prebuilt binary + logs (image builds its own)
+keeper
+*.log
+
+# Keys are bind-mounted at runtime, not baked in
+keys/
+
+# Test fixtures and VCS
+testdata/
+.git/
+.gitignore
