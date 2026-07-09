@@ -1,4 +1,6 @@
 .env
 keys/
 bin/
-.pgdata/
+.pgdata/pgdata/
+keeper
+*.log
