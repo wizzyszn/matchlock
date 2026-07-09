@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"math/rand"
 	"net/http"
 	"sync"
 	"time"
@@ -16,15 +17,30 @@ type guestStartResponse struct {
 	Token string `json:"token"`
 }
 
+type RetryConfig struct {
+	MaxAttempts int
+	BaseDelay   time.Duration
+	MaxDelay    time.Duration
+}
+
 // Client talks to the TxLINE REST and SSE APIs with dual-header auth.
 type Client struct {
 	baseURL    string
 	guestURL   string
 	httpClient *http.Client
 	apiToken   string
+	retry      RetryConfig
 
 	mu  sync.RWMutex
 	jwt string
+}
+
+func defaultRetry() RetryConfig {
+	return RetryConfig{
+		MaxAttempts: 3,
+		BaseDelay:   500 * time.Millisecond,
+		MaxDelay:    5 * time.Second,
+	}
 }
 
 // NewClient creates a TxLINE API client. Call EnsureGuestJWT before data requests.
@@ -37,6 +53,7 @@ func NewClient(baseURL, guestURL, apiToken string, httpClient *http.Client) *Cli
 		guestURL:   guestURL,
 		httpClient: httpClient,
 		apiToken:   apiToken,
+		retry:      defaultRetry(),
 	}
 }
 
@@ -73,6 +90,31 @@ func (c *Client) EnsureGuestJWT(ctx context.Context, force bool) error {
 }
 
 func (c *Client) refreshGuestJWT(ctx context.Context) error {
+	var lastErr error
+	for attempt := 1; attempt <= c.retry.MaxAttempts; attempt++ {
+		lastErr = c.refreshGuestJWTSingle(ctx)
+		if lastErr == nil {
+			return nil
+		}
+		if attempt < c.retry.MaxAttempts {
+			delay := c.retry.BaseDelay * (1 << (attempt - 1))
+			if delay > c.retry.MaxDelay {
+				delay = c.retry.MaxDelay
+			}
+			jitter := time.Duration(rand.Int63n(int64(delay) / 2))
+			delay += jitter
+
+			select {
+			case <-ctx.Done():
+				return ctx.Err()
+			case <-time.After(delay):
+			}
+		}
+	}
+	return fmt.Errorf("guest auth failed after %d attempts: %w", c.retry.MaxAttempts, lastErr)
+}
+
+func (c *Client) refreshGuestJWTSingle(ctx context.Context) error {
 	ctx, cancel := context.WithTimeout(ctx, guestAuthTimeout)
 	defer cancel()
 
