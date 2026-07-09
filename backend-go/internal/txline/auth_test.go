@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"testing"
+	"time"
 )
 
 func TestEnsureGuestJWT(t *testing.T) {
@@ -149,6 +150,54 @@ func TestDoAuthenticatedRefreshFailureOn401(t *testing.T) {
 	req, _ := http.NewRequest(http.MethodGet, srv.URL+"/probe", nil)
 	if _, err := client.DoAuthenticated(context.Background(), req); err == nil {
 		t.Fatal("expected refresh failure")
+	}
+}
+
+func TestRefreshGuestJWTRetriesOnDNSError(t *testing.T) {
+	var calls int
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		calls++
+		if calls < 3 {
+			http.Error(w, "nope", http.StatusInternalServerError)
+			return
+		}
+		_ = json.NewEncoder(w).Encode(guestStartResponse{Token: "jwt-after-retry"})
+	}))
+	defer srv.Close()
+
+	client := NewClient(srv.URL, srv.URL+"/auth/guest/start", "token", srv.Client())
+	client.retry.MaxAttempts = 3
+	client.retry.BaseDelay = 1 * time.Millisecond
+	client.retry.MaxDelay = 5 * time.Millisecond
+
+	if err := client.EnsureGuestJWT(context.Background(), true); err != nil {
+		t.Fatalf("EnsureGuestJWT after retries: %v", err)
+	}
+	if calls != 3 {
+		t.Fatalf("calls = %d, want 3 (2 failures + 1 success)", calls)
+	}
+	if client.JWT() != "jwt-after-retry" {
+		t.Fatalf("jwt = %q, want jwt-after-retry", client.JWT())
+	}
+}
+
+func TestRefreshGuestJWTExhaustsRetries(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		http.Error(w, "always fail", http.StatusInternalServerError)
+	}))
+	defer srv.Close()
+
+	client := NewClient(srv.URL, srv.URL+"/auth/guest/start", "token", srv.Client())
+	client.retry.MaxAttempts = 3
+	client.retry.BaseDelay = 1 * time.Millisecond
+	client.retry.MaxDelay = 5 * time.Millisecond
+
+	err := client.EnsureGuestJWT(context.Background(), true)
+	if err == nil {
+		t.Fatal("expected error after exhausting retries")
+	}
+	if client.JWT() != "" {
+		t.Fatalf("jwt should be empty after failure, got %q", client.JWT())
 	}
 }
 
