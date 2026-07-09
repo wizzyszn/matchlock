@@ -46,6 +46,14 @@ const HistoryPage = lazy(() =>
   import("@/pages/history-page").then((m) => ({ default: m.HistoryPage })),
 );
 
+const TermsPage = lazy(() =>
+  import("@/pages/terms-page").then((m) => ({ default: m.TermsPage })),
+);
+
+const LeaderboardPage = lazy(() =>
+  import("@/pages/leaderboard-page").then((m) => ({ default: m.LeaderboardPage })),
+);
+
 function PageLoader() {
   return (
     <AuthTransitionLoader title="Loading" subtitle="Fetching page data…" />
@@ -66,19 +74,24 @@ export const router = createBrowserRouter([
     element: withSuspense(HomePage),
   },
   {
+    path: "/terms",
+    element: withSuspense(TermsPage),
+  },
+  {
     element: <GuestGuard />,
     children: [
       {
-        element: <AuthLayout />,
+        element: <AuthLayout showHeader={false} showFooter={false} />,
         children: [{ path: "/login", element: withSuspense(LoginPage) }],
       },
     ],
   },
   {
     path: "/auth/verify",
-    element: <AuthLayout />,
+    element: <AuthLayout showFooter={false} showHeader={false} />,
     children: [{ index: true, element: withSuspense(AuthVerifyPage) }],
   },
+
   {
     element: <AuthGuard />,
     children: [
@@ -87,13 +100,18 @@ export const router = createBrowserRouter([
         children: [
           { index: true, element: <Navigate to="/markets" replace /> },
           { path: "markets", element: withSuspense(MarketsPage) },
+        
 
           { path: "open", element: withSuspense(OpenWagersPage) },
           { path: "my-wagers", element: withSuspense(MyWagersPage) },
-          { path: "my-wagers/:wagerPubkey", element: withSuspense(WagerDetailPage) },
+          {
+            path: "my-wagers/:wagerPubkey",
+            element: withSuspense(WagerDetailPage),
+          },
           { path: "history", element: withSuspense(HistoryPage) },
           { path: "invites", element: withSuspense(InvitesPage) },
           { path: "invites/:id", element: withSuspense(InvitesPage) },
+          { path: "leaderboard", element: withSuspense(LeaderboardPage) },
           { path: "profile", element: withSuspense(ProfilePage) },
           { path: "*", element: <Navigate to="/markets" replace /> },
         ],

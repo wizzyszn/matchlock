@@ -3,7 +3,7 @@
 Living log of experience, hurdles, and sweetspots while building the dApp and integrating with TxLINE.
 
 **Maintained by:** developers + Grok (via `/txline-dev-journal` skill)  
-**Last updated:** 2026-07-03
+**Last updated:** 2026-07-08
 
 ---
 
@@ -519,6 +519,95 @@ After Agenda 1 (challenge slip + draw), ship Agenda 4 before Agenda 3 (faucet UX
 
 ---
 
+### 2026-07-08 — E2E Leaderboard: backend service + API + frontend + tests
+
+**Area:** backend-go · frontend-react  
+**Type:** ✨ Sweetspot
+
+#### Context
+Production-level ranking system tracking user PnL, win rate, and volume from settled wagers.
+
+#### Architecture
+
+```
+keeper worker ──► RecordSettlement() ──► leaderboard_entries (Postgres)
+                                              │
+                                              ▼
+                                       GET /leaderboard
+                                       GET /leaderboard/me  (auth required)
+                                       GET /leaderboard/stats
+                                              │
+                                              ▼
+                                       React Query hooks
+                                       (60s polling)
+                                              │
+                                              ▼
+                                       Leaderboard page
+                                       (stats cards, your rank, player list)
+```
+
+#### How it works
+
+1. **DB model** (`internal/db/models.go:135`) — `LeaderboardEntry` keyed by `UserID`, stores `TotalWagers`, `Wins`, `Losses`, `TotalVolume`, `NetPnL`, `UpdatedAt`. GORM auto-migrated. Note: GORM snake-cased `NetPnL` to `net_pn_l` — the `gorm:"column:net_pnl"` tag fixes it.
+
+2. **Settlement recording** (`internal/leaderboard/service.go:72`) — `RecordSettlement` is called by the keeper worker after each successful `settleOne`. For each pubkey (winner + loser):
+   - Resolves wallet → user via `WalletLink` table (Preloads `User` for email/display name)
+   - Upserts `LeaderboardEntry`: winner gets `+stake` PnL, loser gets `-stake` PnL, both get `2x stake` volume and `+1 wager`
+   - Skips silently if pubkey has no linked wallet entry (unlinked wallets don't create phantom leaderboard rows)
+
+3. **Leaderboard query** (`internal/leaderboard/service.go:34`) — `GetLeaderboard` orders by `net_pnl DESC, wins DESC, total_volume DESC`, limits to `100` max (default `20`). Returns `Entry` structs with computed `Rank` (1-indexed) and `WinRate` (wins/total*100).
+
+4. **Single-user rank** (`internal/leaderboard/service.go:127`) — `GetRank` counts how many entries have strictly higher PnL (or same PnL but more wins) to compute the user's rank.
+
+5. **API handlers** (`internal/api/leaderboard_handlers.go`) — Three endpoints:
+   - `GET /leaderboard?limit=N` — public, returns ranked entries
+   - `GET /leaderboard/me` — auth required, returns caller's rank + entry
+   - `GET /leaderboard/stats` — returns aggregate: total players, total volume, avg win rate
+
+6. **Keeper wiring** (`internal/keeper/worker.go`) — After `settleOne` succeeds, calls `Leaderboard.RecordSettlement` with winner/loser pubkeys and stake. Only fires when `KEEPER_AUTO_SETTLE=true`.
+
+7. **Frontend** — React Query hooks (`src/hooks/queries/use-leaderboard.ts`) poll every 60s. The leaderboard page (`src/pages/leaderboard-page.tsx`) shows:
+   - Stats cards (total players, total volume, avg win rate)
+   - "Your rank" card (when logged in)
+   - Player list with gold/silver/bronze rank icons
+
+#### Files changed
+
+| File | What |
+|------|------|
+| `internal/db/models.go` | `LeaderboardEntry` model + `WinRate()` |
+| `internal/db/db.go` | Added `LeaderboardEntry` to AutoMigrate |
+| `internal/leaderboard/service.go` | `Service`, `RecordSettlement`, `GetLeaderboard`, `GetRank` |
+| `internal/keeper/worker.go` | Calls `RecordSettlement` after `settleOne` |
+| `internal/api/leaderboard_handlers.go` | `GET /leaderboard`, `/leaderboard/me`, `/leaderboard/stats` |
+| `internal/api/server.go` | Dependencies + route registration |
+| `cmd/keeper/main.go` | Wired leaderboard service into Worker + API |
+| `.env` | `KEEPER_AUTO_SETTLE=true` |
+| `frontend-react/src/lib/api.ts` | `getLeaderboard`, `getMyLeaderboardRank`, `getLeaderboardStats` |
+| `frontend-react/src/hooks/queries/use-leaderboard.ts` | 3 React Query hooks (60s polling) |
+| `frontend-react/src/pages/leaderboard-page.tsx` | Leaderboard UI |
+| `frontend-react/src/app/router.tsx` | `/leaderboard` route |
+| `frontend-react/src/components/layout/app-shell.tsx` | Nav item |
+
+#### Tests (`internal/leaderboard/service_test.go`)
+
+8 tests covering:
+- `RecordSettlement` creates entries for both winner/loser with correct PnL (+stake / -stake), volume (2x stake), wager counts
+- `RecordSettlement` updates existing entries (accumulates wins, PnL, volume)
+- `RecordSettlement` silently skips unlinked pubkeys (no DB rows created)
+- `GetLeaderboard` returns entries ranked by net PnL descending
+- `GetLeaderboard` respects the limit parameter (and defaults to 20 when 0)
+- `GetRank` returns correct rank (2nd when one user has higher PnL)
+- `GetRank` returns nil for unknown user (no entry yet)
+- `WinRate` is computed correctly (70% for 7/10)
+
+Tests use real Postgres via `db.Open` with cleanup in `t.Cleanup`, same pattern as `internal/db/db_test.go`.
+
+#### 🚧 Hurdle — GORM column naming
+
+GORM auto-migrates `NetPnL` to `net_pn_l` instead of `net_pnl`. Fixed with `gorm:"column:net_pnl"` tag and manual `ALTER TABLE leaderboard_entries RENAME COLUMN net_pn_l TO net_pnl;` in Postgres.
+
+---
 
 ## Template (copy for new entries)
 

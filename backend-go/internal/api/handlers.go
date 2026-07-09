@@ -9,6 +9,7 @@ import (
 	"github.com/gagliardetto/solana-go"
 	"github.com/matchlock/backend-go/internal/auth"
 	"github.com/matchlock/backend-go/internal/cache"
+	"github.com/matchlock/backend-go/internal/leaderboard"
 	chainsol "github.com/matchlock/backend-go/internal/solana"
 	"github.com/matchlock/backend-go/internal/txline"
 )
@@ -31,18 +32,21 @@ type ReadinessProbe interface {
 }
 
 type handler struct {
-	cache      cache.Store
-	wagers     WagerIndex
-	redis      ReadinessProbe
-	rpc        ReadinessProbe
-	txline     ReadinessProbe
-	postgres   ReadinessProbe
-	txlineData settlementProofTxline
-	solana     settlementProofSolana
-	auth       *auth.Service
-	tokenCfg   auth.TokenConfig
-	matchSub   MatchUpdateSubscriber
+	cache       cache.Store
+	wagers      WagerIndex
+	redis       ReadinessProbe
+	rpc         ReadinessProbe
+	txline      ReadinessProbe
+	postgres    ReadinessProbe
+	txlineData  settlementProofTxline
+	solana      settlementProofSolana
+	auth        *auth.Service
+	tokenCfg    auth.TokenConfig
+	matchSub    MatchUpdateSubscriber
+	leaderboard *leaderboard.Service
 }
+
+var _ = &leaderboard.Service{}
 
 type settlementProofTxline interface {
 	FetchStatValidation(ctx context.Context, fixtureID int64, seq int32, statKey uint32) (txline.StatValidation, error)

@@ -3,11 +3,14 @@ package api
 import (
 	"context"
 	"fmt"
+	"io/fs"
 	"net/http"
 	"time"
 
+	openapi "github.com/matchlock/backend-go/api"
 	"github.com/matchlock/backend-go/internal/auth"
 	"github.com/matchlock/backend-go/internal/cache"
+	"github.com/matchlock/backend-go/internal/leaderboard"
 	chainsol "github.com/matchlock/backend-go/internal/solana"
 	"github.com/matchlock/backend-go/internal/txline"
 	"go.uber.org/zap"
@@ -22,14 +25,15 @@ type ServerConfig struct {
 }
 
 type Dependencies struct {
-	Cache    cache.Store
-	Solana   *chainsol.Client
-	Wagers   WagerIndex
-	Txline   *txline.Client
-	Auth     *auth.Service
-	Postgres ReadinessProbe
-	TokenCfg auth.TokenConfig
-	MatchSub MatchUpdateSubscriber
+	Cache       cache.Store
+	Solana      *chainsol.Client
+	Wagers      WagerIndex
+	Txline      *txline.Client
+	Auth        *auth.Service
+	Postgres    ReadinessProbe
+	TokenCfg    auth.TokenConfig
+	MatchSub    MatchUpdateSubscriber
+	Leaderboard *leaderboard.Service
 }
 
 type Server struct {
@@ -43,17 +47,18 @@ func newHandler(deps Dependencies) *handler {
 		wagerIndex = deps.Solana
 	}
 	return &handler{
-		cache:      deps.Cache,
-		wagers:     wagerIndex,
-		redis:      deps.Cache,
-		rpc:        deps.Solana,
-		txline:     deps.Txline,
-		postgres:   deps.Postgres,
-		txlineData: deps.Txline,
-		solana:     deps.Solana,
-		auth:       deps.Auth,
-		tokenCfg:   deps.TokenCfg,
-		matchSub:   deps.MatchSub,
+		cache:       deps.Cache,
+		wagers:      wagerIndex,
+		redis:       deps.Cache,
+		rpc:         deps.Solana,
+		txline:      deps.Txline,
+		postgres:    deps.Postgres,
+		txlineData:  deps.Txline,
+		solana:      deps.Solana,
+		auth:        deps.Auth,
+		tokenCfg:    deps.TokenCfg,
+		matchSub:    deps.MatchSub,
+		leaderboard: deps.Leaderboard,
 	}
 }
 
@@ -82,11 +87,21 @@ func newMux(h *handler) *http.ServeMux {
 	mux.HandleFunc("DELETE /auth/wallets/{pubkey}", auth.RequireAuth(h.deleteWallet))
 	mux.HandleFunc("GET /users/lookup", auth.RequireAuth(h.getUserLookup))
 
+	mux.HandleFunc("GET /leaderboard", h.getLeaderboard)
+	mux.HandleFunc("GET /leaderboard/me", auth.RequireAuth(h.getMyLeaderboardRank))
+	mux.HandleFunc("GET /leaderboard/stats", h.getLeaderboardStats)
+
 	mux.HandleFunc("POST /challenges/invites", auth.RequireAuth(h.postChallengeInvite))
 	mux.HandleFunc("GET /challenges/invites", auth.RequireAuth(h.listChallengeInvites))
 	mux.HandleFunc("GET /challenges/invites/{id}", auth.RequireAuth(h.getChallengeInvite))
 	mux.HandleFunc("PATCH /challenges/invites/{id}", auth.RequireAuth(h.patchChallengeInvite))
 	mux.HandleFunc("POST /challenges/invites/{id}/wager", auth.RequireAuth(h.postChallengeInviteWager))
+
+	mux.Handle("GET /openapi.yaml", serveOpenAPISpec())
+	mux.Handle("GET /docs", serveDocs())
+	mux.HandleFunc("GET /docs/", func(w http.ResponseWriter, r *http.Request) {
+		http.Redirect(w, r, "/docs", http.StatusMovedPermanently)
+	})
 
 	return mux
 }
@@ -168,6 +183,44 @@ func (r *responseRecorder) Write(data []byte) (int, error) {
 	n, err := r.ResponseWriter.Write(data)
 	r.bytes += n
 	return n, err
+}
+
+const docsHTML = `<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Matchlock API Docs</title>
+  <link rel="stylesheet" href="https://unpkg.com/swagger-ui-dist@5/swagger-ui.css" />
+</head>
+<body>
+  <div id="swagger-ui"></div>
+  <script src="https://unpkg.com/swagger-ui-dist@5/swagger-ui-bundle.js"></script>
+  <script>
+    SwaggerUIBundle({ url: "/openapi.yaml", dom_id: "#swagger-ui" });
+  </script>
+</body>
+</html>`
+
+func serveOpenAPISpec() http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		spec, err := fs.ReadFile(openapi.OpenAPISpec, "openapi.yaml")
+		if err != nil {
+			http.Error(w, "openapi spec not found", http.StatusNotFound)
+			return
+		}
+		w.Header().Set("Content-Type", "application/x-yaml")
+		w.WriteHeader(http.StatusOK)
+		w.Write(spec)
+	})
+}
+
+func serveDocs() http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "text/html; charset=utf-8")
+		w.WriteHeader(http.StatusOK)
+		w.Write([]byte(docsHTML))
+	})
 }
 
 func loggingMiddleware(logger *zap.Logger) func(http.Handler) http.Handler {

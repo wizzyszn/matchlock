@@ -9,6 +9,7 @@ import (
 
 	solanago "github.com/gagliardetto/solana-go"
 	"github.com/matchlock/backend-go/internal/cache"
+	"github.com/matchlock/backend-go/internal/leaderboard"
 	chainsol "github.com/matchlock/backend-go/internal/solana"
 	"github.com/matchlock/backend-go/internal/txline"
 )
@@ -36,6 +37,7 @@ type Worker struct {
 	AutoSettle            bool
 	MaxSettlementAttempts int
 	SettlementRetryBase   time.Duration
+	Leaderboard           *leaderboard.Service
 }
 
 // Run processes score updates until ctx is cancelled.
@@ -187,6 +189,27 @@ func (w *Worker) settleOne(
 		"tx_sig", sig.String(),
 		"winning_side", winningSide,
 	)
+
+	if w.Leaderboard != nil {
+		winnerPubkey, _ := wager.WinnerPubkey(winningSide)
+		loserPubkey := wager.Maker
+		if winnerPubkey.Equals(wager.Maker) && wager.HasCounterparty() {
+			loserPubkey = wager.Taker
+		}
+		if err := w.Leaderboard.RecordSettlement(ctx, leaderboard.SettlementEvent{
+			WinnerPubkey: winnerPubkey.String(),
+			LoserPubkey:  loserPubkey.String(),
+			Stake:        wager.Stake,
+			MatchID:      matchID,
+		}); err != nil {
+			slog.Warn("leaderboard record failed",
+				"match_id", matchID,
+				"wager_pubkey", wager.Pubkey.String(),
+				"err", err,
+			)
+		}
+	}
+
 	return nil
 }
 
