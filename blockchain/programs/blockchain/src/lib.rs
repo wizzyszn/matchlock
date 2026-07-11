@@ -12,7 +12,7 @@ pub use error::ErrorCode;
 pub use instructions::*;
 pub use state::*;
 
-declare_id!("VgsUt4Fjn6jqrqP7EuqvWJM3NqYufA2haNrP9fGGaYv");
+declare_id!("6a1hkAgtuewKaB6B4vt1bMymcFVtK85mGVbVBJkURaZ8");
 
 #[program]
 pub mod blockchain {
@@ -44,6 +44,8 @@ pub mod blockchain {
         stake_amount: u64,
         maker_side: Side,
         invited_taker: Pubkey,
+        participant1_is_home: bool,
+        nonce: u64,
     ) -> Result<()> {
         instructions::make_wager::handle_make_wager(
             ctx,
@@ -51,6 +53,8 @@ pub mod blockchain {
             stake_amount,
             maker_side,
             invited_taker,
+            participant1_is_home,
+            nonce,
         )
     }
 

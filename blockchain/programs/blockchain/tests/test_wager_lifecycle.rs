@@ -17,7 +17,7 @@ fn unregistered_wallet_cannot_make_wager() {
     env.fund_wallet(&stranger.pubkey(), 5_000_000);
 
     let maker = stranger.pubkey();
-    let (wager, vault) = env.wager_pdas(&maker, &env.match_id);
+    let (wager, vault) = env.wager_pdas(&maker, &env.match_id, 1);
     let maker_ata = get_associated_token_address(&maker, &env.mint);
     let profile = env.wallet_profile_pda(&maker);
 
@@ -28,6 +28,8 @@ fn unregistered_wallet_cannot_make_wager() {
             stake_amount: 100_000,
             maker_side: Side::Home,
             invited_taker: solana_address::Address::default(),
+            participant1_is_home: true,
+            nonce: 1,
         }
         .data(),
         blockchain::accounts::MakeWager {
@@ -269,7 +271,95 @@ fn settle_wager_wrong_winner_side_fails() {
         Some(&env.authority.pubkey()),
         &[&env.authority],
         env.svm.latest_blockhash(),
-    );  
+    );
+    assert!(env.svm.send_transaction(tx).is_err());
+}
+
+#[test]
+fn settle_wager_wrong_fixture_proof_fails() {
+    let mut env = TestEnv::new();
+    let (wager, vault) = env.make_wager(100_000, Side::Home);
+    env.accept_wager(wager, vault, Side::Away);
+
+    let maker = env.maker.pubkey();
+    let maker_ata = get_associated_token_address(&maker, &env.mint);
+    let daily_scores = env.setup_daily_scores_account();
+    let mut validation = env.validation_for_side(Side::Home);
+    validation.fixture_summary.fixture_id = 2;
+
+    let ix = Instruction::new_with_bytes(
+        blockchain::id(),
+        &blockchain::instruction::SettleWager {
+            validation,
+            winning_side: Side::Home,
+            merkle_root: [1u8; 32],
+        }
+        .data(),
+        blockchain::accounts::SettleWager {
+            settler: maker,
+            config: env.config,
+            wager,
+            vault,
+            winner: maker,
+            winner_stablecoin: maker_ata,
+            stablecoin_mint: env.mint,
+            daily_scores_merkle_roots: daily_scores,
+            txline_program: TXLINE_MOCK_PROGRAM_ID,
+            token_program: TOKEN_PROGRAM_ID,
+            associated_token_program: ATA_PROGRAM_ID,
+        }
+        .to_account_metas(None),
+    );
+
+    let tx = Transaction::new_signed_with_payer(
+        &[ix],
+        Some(&maker),
+        &[&env.maker],
+        env.svm.latest_blockhash(),
+    );
+    assert!(env.svm.send_transaction(tx).is_err());
+}
+
+#[test]
+fn settle_wager_wrong_outcome_stat_fails() {
+    let mut env = TestEnv::new();
+    let (wager, vault) = env.make_wager(100_000, Side::Home);
+    env.accept_wager(wager, vault, Side::Away);
+
+    let maker = env.maker.pubkey();
+    let maker_ata = get_associated_token_address(&maker, &env.mint);
+    let daily_scores = env.setup_daily_scores_account();
+
+    let ix = Instruction::new_with_bytes(
+        blockchain::id(),
+        &blockchain::instruction::SettleWager {
+            validation: env.validation_for_stat_key(1003),
+            winning_side: Side::Home,
+            merkle_root: [1u8; 32],
+        }
+        .data(),
+        blockchain::accounts::SettleWager {
+            settler: maker,
+            config: env.config,
+            wager,
+            vault,
+            winner: maker,
+            winner_stablecoin: maker_ata,
+            stablecoin_mint: env.mint,
+            daily_scores_merkle_roots: daily_scores,
+            txline_program: TXLINE_MOCK_PROGRAM_ID,
+            token_program: TOKEN_PROGRAM_ID,
+            associated_token_program: ATA_PROGRAM_ID,
+        }
+        .to_account_metas(None),
+    );
+
+    let tx = Transaction::new_signed_with_payer(
+        &[ix],
+        Some(&maker),
+        &[&env.maker],
+        env.svm.latest_blockhash(),
+    );
     assert!(env.svm.send_transaction(tx).is_err());
 }
 

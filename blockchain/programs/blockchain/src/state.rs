@@ -43,11 +43,15 @@ pub struct Wager {
     pub taker: Pubkey,
     pub match_id: [u8; 32],
     pub match_id_len: u8,
+    /// TxLINE orientation needed to map participant outcome stats to home/away sides.
+    pub participant1_is_home: bool,
     pub maker_side: Side,
     /// Set on accept; meaningful once status is Matched or later.
     pub taker_side: Side,
     pub stake_amount: u64,
     pub status: WagerStatus,
+    /// Client-generated nonce to allow multiple wagers per maker per match.
+    pub nonce: u64,
     pub bump: u8,
     pub vault_bump: u8,
 }

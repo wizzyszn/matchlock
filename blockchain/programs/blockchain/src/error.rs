@@ -6,7 +6,7 @@ pub enum ErrorCode {
     Unauthorized,
     #[msg("Wager is not in the required status for this action")]
     InvalidStatus,
-    #[msg("Match ID must be between 1 and 32 bytes")]
+    #[msg("Match ID must be a numeric fixture ID between 1 and 32 bytes")]
     InvalidMatchId,
     #[msg("Stake amount must be greater than zero")]
     InvalidStake,
@@ -22,6 +22,8 @@ pub enum ErrorCode {
     InvalidTakerSide,
     #[msg("Winning side must match maker or taker position")]
     InvalidWinningSide,
+    #[msg("Settlement proof does not match this wager")]
+    InvalidSettlementProof,
     #[msg("TxLINE stat validation failed or returned false")]
     ValidationFailed,
     #[msg("Wager is already settled")]
