@@ -13,7 +13,7 @@ import { queryKeys } from '@/lib/query-keys'
 import { cn } from '@/lib/utils'
 
 function inviteSideLabel(
-  side: 'home' | 'draw' | 'away',
+  side: 'home' | 'draw' | 'away' | 'unset',
   homeTeam?: string,
   awayTeam?: string,
 ) {
@@ -24,6 +24,8 @@ function inviteSideLabel(
       return awayTeam ?? 'Away'
     case 'draw':
       return 'Draw'
+    case 'unset':
+      return 'TBD'
   }
 }
 

@@ -12,7 +12,7 @@ pub use error::ErrorCode;
 pub use instructions::*;
 pub use state::*;
 
-declare_id!("6a1hkAgtuewKaB6B4vt1bMymcFVtK85mGVbVBJkURaZ8");
+declare_id!("7jbdwJLrePo6dr6Jo5sSmK4RQC5tYRrGebnkMFTuPGq5");
 
 #[program]
 pub mod blockchain {

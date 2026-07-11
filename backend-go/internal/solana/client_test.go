@@ -13,7 +13,7 @@ import (
 )
 
 const (
-	testProgramID = "6a1hkAgtuewKaB6B4vt1bMymcFVtK85mGVbVBJkURaZ8"
+	testProgramID = "7jbdwJLrePo6dr6Jo5sSmK4RQC5tYRrGebnkMFTuPGq5"
 	testMint      = "ELWTKspHKCnCfCiCiqYw1EDH77k8VCP74dK9qytG2Ujh"
 	testTxlineID  = "6pW64gN1s2uqjHkn1unFeEjAwJkPGHoppGvS715wyP2J"
 )

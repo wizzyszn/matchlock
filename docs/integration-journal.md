@@ -609,6 +609,52 @@ GORM auto-migrates `NetPnL` to `net_pn_l` instead of `net_pnl`. Fixed with `gorm
 
 ---
 
+### 2026-07-11 — Production hardening: pause/unpause, Side::Unset, update_config
+
+**Area:** blockchain · backend-go · frontend-react · cross-cutting
+**Type:** ✨ Sweetspot
+
+#### Context
+Before opening the platform to real users, we hardened the program to prevent abuse and give the admin a safety kill switch.
+
+#### Changes
+
+**On-chain (`blockchain/`)**
+
+| Change | Details |
+|--------|---------|
+| `Side::Unset` variant | Added to `state.rs` — `taker_side` initializes as `Unset` instead of `Home`, preventing accidental settlement matches |
+| `Config.paused` bool | New field; defaults to `false` on initialize |
+| `ContractPaused` error | Error code 6018 in `error.rs` |
+| `update_config` instruction | Permissioned (config authority) — partial updates via `Option<>` fields: `new_authority`, `new_stablecoin_mint`, `new_txline_program`, `paused` |
+| Paused gating | `make_wager`, `accept_wager`, `register_wallet` check `!config.paused` and return `ContractPaused` |
+| Unpaused operations | `cancel_wager`, `settle_wager`, `unregister_wallet` intentionally **skip** the paused check so funds are never trapped |
+| `stat_key_for_winning_side` | Now returns `Result<u32>` — rejects `Side::Unset` with `InvalidWinningSide` instead of silently matching |
+
+**Backend (`backend-go/`)**
+
+- Added `SideUnset = 3` constant; `SideName("unset")` returns `"unset"` instead of defaulting to `"home"`
+
+**Frontend (`frontend-react/`)**
+
+- `Side` type widened to `'home' | 'draw' | 'away' | 'unset'`
+- `toAnchorSide` throws on `'unset'` (can't submit it as an instruction arg)
+- `sideLabel`, `sideShortLabel`, `referenceOddsForSide` all handle `'unset'` (return `'—'` or `null`)
+- IDL regenerated with new `update_config` instruction + `paused` field + `ContractPaused` error
+- `useContractPaused` hook fetches `Config.paused` every 30s from the chain
+
+#### Deployment
+
+- New program keypair generated: `7jbdwJLrePo6dr6Jo5sSmK4RQC5tYRrGebnkMFTuPGq5`
+- Deployed to devnet; Config PDA initialized at `FU8myLVAMXBZfsEE9PbpmRmeqR8R82NR2gYGphqjcqcS`
+- Program ID updated across 12 files: `lib.rs`, `Anchor.toml`, frontend IDL/env/store, backend config/constants/env/OpenAPI/cli/test
+
+#### Design rationale
+
+Paused is **not** a full halt — users can always withdraw funds (cancel open wagers) and the keeper can still settle matched wagers. This follows the principle that contract admin actions should never trap user funds.
+
+---
+
 ## Template (copy for new entries)
 
 ```markdown

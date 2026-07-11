@@ -13,7 +13,7 @@ const configResult = tryLoadConfig()
 
 const fallbackConfig: AppConfig = {
   rpcUrl: 'https://api.devnet.solana.com',
-  programId: '6a1hkAgtuewKaB6B4vt1bMymcFVtK85mGVbVBJkURaZ8',
+  programId: '7jbdwJLrePo6dr6Jo5sSmK4RQC5tYRrGebnkMFTuPGq5',
   backendUrl: 'http://localhost:8080',
   cluster: 'devnet',
   usdcMint: 'ELWTKspHKCnCfCiCiqYw1EDH77k8VCP74dK9qytG2Ujh',
