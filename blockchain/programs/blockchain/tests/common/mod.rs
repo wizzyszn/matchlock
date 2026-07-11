@@ -72,7 +72,7 @@ impl TestEnv {
             taker,
             mint: mint.pubkey(),
             config: Address::default(),
-            match_id: b"wc-match-001".to_vec(),
+            match_id: b"1".to_vec(),
         };
 
         env.init_mint(&mint);
@@ -192,9 +192,9 @@ impl TestEnv {
         assert_eq!(p.wallet, *wallet);
     }
 
-    pub fn wager_pdas(&self, maker: &Address, match_id: &[u8]) -> (Address, Address) {
+    pub fn wager_pdas(&self, maker: &Address, match_id: &[u8], nonce: u64) -> (Address, Address) {
         let (wager, _) = Address::find_program_address(
-            &[WAGER_SEED, maker.as_ref(), match_id],
+            &[WAGER_SEED, maker.as_ref(), match_id, &nonce.to_le_bytes()],
             &blockchain::id(),
         );
         let (vault, _) =
@@ -217,9 +217,33 @@ impl TestEnv {
         self.make_wager_for(stake, side, Address::default())
     }
 
-    pub fn make_wager_for(&mut self, stake: u64, side: Side, invited_taker: Address) -> (Address, Address) {
+    pub fn make_wager_with_nonce(
+        &mut self,
+        stake: u64,
+        side: Side,
+        nonce: u64,
+    ) -> (Address, Address) {
+        self.make_wager_for_with_nonce(stake, side, Address::default(), nonce)
+    }
+
+    pub fn make_wager_for(
+        &mut self,
+        stake: u64,
+        side: Side,
+        invited_taker: Address,
+    ) -> (Address, Address) {
+        self.make_wager_for_with_nonce(stake, side, invited_taker, 1)
+    }
+
+    pub fn make_wager_for_with_nonce(
+        &mut self,
+        stake: u64,
+        side: Side,
+        invited_taker: Address,
+        nonce: u64,
+    ) -> (Address, Address) {
         let maker = self.maker.pubkey();
-        let (wager, vault) = self.wager_pdas(&maker, &self.match_id);
+        let (wager, vault) = self.wager_pdas(&maker, &self.match_id, nonce);
         let maker_ata = get_associated_token_address(&maker, &self.mint);
 
         let ix = Instruction::new_with_bytes(
@@ -229,6 +253,8 @@ impl TestEnv {
                 stake_amount: stake,
                 maker_side: side,
                 invited_taker,
+                participant1_is_home: true,
+                nonce,
             }
             .data(),
             blockchain::accounts::MakeWager {
@@ -323,6 +349,19 @@ impl TestEnv {
     }
 
     pub fn minimal_validation(&self) -> ValidateStatArgs {
+        self.validation_for_stat_key(1002)
+    }
+
+    pub fn validation_for_side(&self, side: Side) -> ValidateStatArgs {
+        let stat_key = match side {
+            Side::Draw => 1001,
+            Side::Home => 1002,
+            Side::Away => 1003,
+        };
+        self.validation_for_stat_key(stat_key)
+    }
+
+    pub fn validation_for_stat_key(&self, stat_key: u32) -> ValidateStatArgs {
         ValidateStatArgs {
             ts: 1_700_000_000_000,
             fixture_summary: blockchain::cpi::ScoresBatchSummary {
@@ -342,7 +381,7 @@ impl TestEnv {
             },
             stat_a: blockchain::cpi::StatTerm {
                 stat_to_prove: blockchain::cpi::ScoreStat {
-                    key: 1002,
+                    key: stat_key,
                     value: 1,
                     period: 0,
                 },
@@ -367,12 +406,12 @@ impl TestEnv {
             self.create_ata(&winner);
         }
         let daily_scores = self.setup_daily_scores_account();
-        let merkle_root = [9u8; 32];
+        let merkle_root = [1u8; 32];
 
         let ix = Instruction::new_with_bytes(
             blockchain::id(),
             &blockchain::instruction::SettleWager {
-                validation: self.minimal_validation(),
+                validation: self.validation_for_side(winning_side),
                 winning_side,
                 merkle_root,
             }
@@ -407,12 +446,12 @@ impl TestEnv {
             self.create_ata(&winner);
         }
         let daily_scores = self.setup_daily_scores_account();
-        let merkle_root = [9u8; 32];
+        let merkle_root = [1u8; 32];
 
         let ix = Instruction::new_with_bytes(
             blockchain::id(),
             &blockchain::instruction::SettleWager {
-                validation: self.minimal_validation(),
+                validation: self.validation_for_side(winning_side),
                 winning_side,
                 merkle_root,
             }

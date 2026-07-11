@@ -66,8 +66,15 @@ pub fn handle_cancel_wager(ctx: Context<CancelWager>) -> Result<()> {
     let match_id_len = wager.match_id_len;
     let match_id = wager.match_id;
     let match_id_slice = &match_id[..match_id_len as usize];
+    let nonce = wager.nonce;
 
-    let seeds = &[WAGER_SEED, maker.as_ref(), match_id_slice, &[bump]];
+    let seeds = &[
+        WAGER_SEED,
+        maker.as_ref(),
+        match_id_slice,
+        &nonce.to_le_bytes(),
+        &[bump],
+    ];
     let signer = &[&seeds[..]];
 
     let cpi_accounts = TransferChecked {

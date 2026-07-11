@@ -43,7 +43,7 @@ pub struct StatTerm {
     pub stat_proof: Vec<ProofNode>,
 }
 
-#[derive(AnchorSerialize, AnchorDeserialize, Clone)]
+#[derive(AnchorSerialize, AnchorDeserialize, Clone, PartialEq, Eq, Debug)]
 pub enum Comparison {
     GreaterThan,
     LessThan,
@@ -56,7 +56,7 @@ pub struct TraderPredicate {
     pub comparison: Comparison,
 }
 
-#[derive(AnchorSerialize, AnchorDeserialize, Clone)]
+#[derive(AnchorSerialize, AnchorDeserialize, Clone, PartialEq, Eq, Debug)]
 pub enum BinaryExpression {
     Add,
     Subtract,

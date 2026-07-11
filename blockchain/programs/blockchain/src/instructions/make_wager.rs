@@ -7,7 +7,7 @@ use anchor_spl::{
 use crate::{constants::*, error::ErrorCode, state::*};
 
 #[derive(Accounts)]
-#[instruction(match_id: Vec<u8>, stake_amount: u64, maker_side: Side, invited_taker: Pubkey)]
+#[instruction(match_id: Vec<u8>, stake_amount: u64, maker_side: Side, invited_taker: Pubkey, participant1_is_home: bool, nonce: u64)]
 pub struct MakeWager<'info> {
     #[account(mut)]
     pub maker: Signer<'info>,
@@ -22,7 +22,7 @@ pub struct MakeWager<'info> {
         init,
         payer = maker,
         space = 8 + Wager::INIT_SPACE,
-        seeds = [WAGER_SEED, maker.key().as_ref(), match_id.as_slice()],
+        seeds = [WAGER_SEED, maker.key().as_ref(), match_id.as_slice(), nonce.to_le_bytes().as_ref()],
         bump
     )]
     pub wager: Account<'info, Wager>,
@@ -67,9 +67,15 @@ pub fn handle_make_wager(
     stake_amount: u64,
     maker_side: Side,
     invited_taker: Pubkey,
+    participant1_is_home: bool,
+    nonce: u64,
 ) -> Result<()> {
     require!(
         !match_id.is_empty() && match_id.len() <= MAX_MATCH_ID_LEN,
+        ErrorCode::InvalidMatchId,
+    );
+    require!(
+        match_id.iter().all(|byte| byte.is_ascii_digit()),
         ErrorCode::InvalidMatchId,
     );
     require!(stake_amount > 0, ErrorCode::InvalidStake);
@@ -88,10 +94,12 @@ pub fn handle_make_wager(
     wager.match_id = [0u8; 32];
     wager.match_id[..match_id.len()].copy_from_slice(&match_id);
     wager.match_id_len = match_id.len() as u8;
+    wager.participant1_is_home = participant1_is_home;
     wager.maker_side = maker_side;
     wager.taker_side = Side::Home;
     wager.stake_amount = stake_amount;
     wager.status = WagerStatus::Open;
+    wager.nonce = nonce;
     wager.bump = ctx.bumps.wager;
     wager.vault_bump = ctx.bumps.vault;
 

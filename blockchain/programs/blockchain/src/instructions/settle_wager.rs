@@ -6,10 +6,14 @@ use anchor_spl::{
 
 use crate::{
     constants::*,
-    cpi::{invoke_validate_stat, ValidateStatArgs},
+    cpi::{invoke_validate_stat, Comparison, ValidateStatArgs},
     error::ErrorCode,
     state::*,
 };
+
+const TXLINE_STAT_DRAW: u32 = 1001;
+const TXLINE_STAT_P1_WIN: u32 = 1002;
+const TXLINE_STAT_P2_WIN: u32 = 1003;
 
 #[derive(Accounts)]
 pub struct SettleWager<'info> {
@@ -103,6 +107,8 @@ pub fn handle_settle_wager(
         ErrorCode::Unauthorized,
     );
 
+    validate_settlement_proof(wager, &validation, winning_side, merkle_root)?;
+
     invoke_validate_stat(
         &ctx.accounts.txline_program.to_account_info(),
         &ctx.accounts.daily_scores_merkle_roots.to_account_info(),
@@ -119,9 +125,16 @@ pub fn handle_settle_wager(
     let match_id_len = wager.match_id_len;
     let match_id = wager.match_id;
     let match_id_slice = &match_id[..match_id_len as usize];
+    let nonce = wager.nonce;
     let decimals = ctx.accounts.stablecoin_mint.decimals;
 
-    let seeds = &[WAGER_SEED, maker.as_ref(), match_id_slice, &[bump]];
+    let seeds = &[
+        WAGER_SEED,
+        maker.as_ref(),
+        match_id_slice,
+        &nonce.to_le_bytes(),
+        &[bump],
+    ];
     let signer = &[&seeds[..]];
 
     let transfer_accounts = TransferChecked {
@@ -157,4 +170,72 @@ pub fn handle_settle_wager(
         total_payout
     );
     Ok(())
+}
+
+fn validate_settlement_proof(
+    wager: &Wager,
+    validation: &ValidateStatArgs,
+    winning_side: Side,
+    merkle_root: [u8; 32],
+) -> Result<()> {
+    require!(
+        validation.fixture_summary.fixture_id == wager_fixture_id(wager)?,
+        ErrorCode::InvalidSettlementProof,
+    );
+    require!(
+        validation.fixture_summary.events_sub_tree_root == merkle_root,
+        ErrorCode::InvalidSettlementProof,
+    );
+    require!(
+        validation.predicate.threshold == 0
+            && validation.predicate.comparison == Comparison::GreaterThan
+            && validation.stat_b.is_none()
+            && validation.op.is_none(),
+        ErrorCode::InvalidSettlementProof,
+    );
+    require!(
+        validation.stat_a.stat_to_prove.value > 0,
+        ErrorCode::ValidationFailed,
+    );
+
+    let stat_key = validation.stat_a.stat_to_prove.key;
+    let expected_stat_key = stat_key_for_winning_side(winning_side, wager.participant1_is_home);
+    require!(
+        stat_key == expected_stat_key,
+        ErrorCode::InvalidSettlementProof,
+    );
+    Ok(())
+}
+
+fn stat_key_for_winning_side(winning_side: Side, participant1_is_home: bool) -> u32 {
+    match winning_side {
+        Side::Draw => TXLINE_STAT_DRAW,
+        Side::Home => {
+            if participant1_is_home {
+                TXLINE_STAT_P1_WIN
+            } else {
+                TXLINE_STAT_P2_WIN
+            }
+        }
+        Side::Away => {
+            if participant1_is_home {
+                TXLINE_STAT_P2_WIN
+            } else {
+                TXLINE_STAT_P1_WIN
+            }
+        }
+    }
+}
+
+fn wager_fixture_id(wager: &Wager) -> Result<i64> {
+    let mut out = 0i64;
+    for byte in wager.match_id_bytes() {
+        require!(byte.is_ascii_digit(), ErrorCode::InvalidMatchId);
+        let digit = (*byte - b'0') as i64;
+        out = out
+            .checked_mul(10)
+            .and_then(|value| value.checked_add(digit))
+            .ok_or(ErrorCode::InvalidMatchId)?;
+    }
+    Ok(out)
 }
