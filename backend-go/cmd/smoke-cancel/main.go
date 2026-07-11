@@ -65,10 +65,12 @@ func main() {
 	}
 
 	wagerPDA, makeSig, err := client.MakeWager(ctx, chainsol.MakeWagerParams{
-		Maker:     maker.PrivateKey,
-		MatchID:   matchID,
-		Stake:     defaultStake,
-		MakerSide: chainsol.SideHome,
+		Maker:              maker.PrivateKey,
+		MatchID:            matchID,
+		Stake:              defaultStake,
+		MakerSide:          chainsol.SideHome,
+		Participant1IsHome: true,
+		Nonce:              uint64(time.Now().UnixNano()),
 	})
 	if err != nil {
 		exitErr("make_wager: %w", err)

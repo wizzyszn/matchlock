@@ -31,33 +31,60 @@ const (
 
 	wagerAccountSizeV1 = 118
 	wagerAccountSizeV2 = 150
+	wagerAccountSizeV3 = 151
+	wagerAccountSizeV4 = 159
+
+	// V4 offsets (with nonce)
+	statusOffsetV4             = 148
+	matchIDOffsetV4            = 104
+	participant1IsHomeOffsetV4 = 137
+	makerSideOffsetV4          = 138
+	takerSideOffsetV4          = 139
+	stakeOffsetV4              = 140
+	nonceOffsetV4              = 149
+	bumpOffsetV4               = 157
+	vaultBumpOffsetV4          = 158
+
+	// V3 offsets (with invited_taker and participant1_is_home)
+	statusOffsetV3             = 148
+	matchIDOffsetV3            = 104
+	participant1IsHomeOffsetV3 = 137
+	makerSideOffsetV3          = 138
+	takerSideOffsetV3          = 139
+	stakeOffsetV3              = 140
 
 	// V2 offsets (with invited_taker)
-	statusOffsetV2     = 147
-	matchIDOffsetV2    = 104
-	takerSideOffsetV2  = 138
+	statusOffsetV2       = 147
+	matchIDOffsetV2      = 104
+	makerSideOffsetV2    = 137
+	takerSideOffsetV2    = 138
+	stakeOffsetV2        = 139
 	invitedTakerOffsetV2 = 40
 
 	// V1 offsets (no invited_taker)
 	statusOffsetV1    = 115
 	matchIDOffsetV1   = 72
+	makerSideOffsetV1 = 105
 	takerSideOffsetV1 = 106
+	stakeOffsetV1     = 107
 )
 
 // Wager is a decoded on-chain wager account.
 type Wager struct {
-	Pubkey        solana.PublicKey
-	Maker         solana.PublicKey
-	InvitedTaker  solana.PublicKey
-	Taker         solana.PublicKey
-	MatchID   [32]byte
-	MatchIDLen uint8
-	MakerSide uint8
-	TakerSide uint8
-	Stake     uint64
-	Status    uint8
-	Bump      uint8
-	VaultBump uint8
+	Pubkey             solana.PublicKey
+	Maker              solana.PublicKey
+	InvitedTaker       solana.PublicKey
+	Taker              solana.PublicKey
+	MatchID            [32]byte
+	MatchIDLen         uint8
+	Participant1IsHome bool
+	MakerSide          uint8
+	TakerSide          uint8
+	Stake              uint64
+	Status             uint8
+	Nonce              uint64
+	Bump               uint8
+	VaultBump          uint8
 }
 
 func DecodeWager(pubkey solana.PublicKey, data []byte) (Wager, error) {
@@ -75,31 +102,66 @@ func DecodeWager(pubkey solana.PublicKey, data []byte) (Wager, error) {
 		Maker:  solana.PublicKeyFromBytes(data[8:40]),
 	}
 
-	if len(data) == wagerAccountSizeV1 {
+	switch len(data) {
+	case wagerAccountSizeV1:
 		// V1 Layout: no invited_taker
 		w.Taker = solana.PublicKeyFromBytes(data[40:72])
 		copy(w.MatchID[:], data[matchIDOffsetV1:matchIDOffsetV1+32])
 		w.MatchIDLen = data[104]
-		w.MakerSide = data[105]
+		w.Participant1IsHome = true
+		w.MakerSide = data[makerSideOffsetV1]
 		w.TakerSide = data[takerSideOffsetV1]
-		w.Stake = uint64(data[107]) | uint64(data[108])<<8 | uint64(data[109])<<16 | uint64(data[110])<<24 |
-			uint64(data[111])<<32 | uint64(data[112])<<40 | uint64(data[113])<<48 | uint64(data[114])<<56
+		w.Stake = uint64(data[stakeOffsetV1]) | uint64(data[stakeOffsetV1+1])<<8 | uint64(data[stakeOffsetV1+2])<<16 | uint64(data[stakeOffsetV1+3])<<24 |
+			uint64(data[stakeOffsetV1+4])<<32 | uint64(data[stakeOffsetV1+5])<<40 | uint64(data[stakeOffsetV1+6])<<48 | uint64(data[stakeOffsetV1+7])<<56
 		w.Status = data[statusOffsetV1]
 		w.Bump = data[116]
 		w.VaultBump = data[117]
-	} else {
+	case wagerAccountSizeV2:
 		// V2 Layout: has invited_taker
 		w.InvitedTaker = solana.PublicKeyFromBytes(data[invitedTakerOffsetV2 : invitedTakerOffsetV2+32])
 		w.Taker = solana.PublicKeyFromBytes(data[72:104])
 		copy(w.MatchID[:], data[matchIDOffsetV2:matchIDOffsetV2+32])
 		w.MatchIDLen = data[136]
-		w.MakerSide = data[137]
+		w.Participant1IsHome = true
+		w.MakerSide = data[makerSideOffsetV2]
 		w.TakerSide = data[takerSideOffsetV2]
-		w.Stake = uint64(data[139]) | uint64(data[140])<<8 | uint64(data[141])<<16 | uint64(data[142])<<24 |
-			uint64(data[143])<<32 | uint64(data[144])<<40 | uint64(data[145])<<48 | uint64(data[146])<<56
+		w.Stake = uint64(data[stakeOffsetV2]) | uint64(data[stakeOffsetV2+1])<<8 | uint64(data[stakeOffsetV2+2])<<16 | uint64(data[stakeOffsetV2+3])<<24 |
+			uint64(data[stakeOffsetV2+4])<<32 | uint64(data[stakeOffsetV2+5])<<40 | uint64(data[stakeOffsetV2+6])<<48 | uint64(data[stakeOffsetV2+7])<<56
 		w.Status = data[statusOffsetV2]
 		w.Bump = data[148]
 		w.VaultBump = data[149]
+	case wagerAccountSizeV3:
+		// V3 Layout: V2 plus TxLINE participant orientation
+		w.InvitedTaker = solana.PublicKeyFromBytes(data[invitedTakerOffsetV2 : invitedTakerOffsetV2+32])
+		w.Taker = solana.PublicKeyFromBytes(data[72:104])
+		copy(w.MatchID[:], data[matchIDOffsetV3:matchIDOffsetV3+32])
+		w.MatchIDLen = data[136]
+		w.Participant1IsHome = data[participant1IsHomeOffsetV3] != 0
+		w.MakerSide = data[makerSideOffsetV3]
+		w.TakerSide = data[takerSideOffsetV3]
+		w.Stake = uint64(data[stakeOffsetV3]) | uint64(data[stakeOffsetV3+1])<<8 | uint64(data[stakeOffsetV3+2])<<16 | uint64(data[stakeOffsetV3+3])<<24 |
+			uint64(data[stakeOffsetV3+4])<<32 | uint64(data[stakeOffsetV3+5])<<40 | uint64(data[stakeOffsetV3+6])<<48 | uint64(data[stakeOffsetV3+7])<<56
+		w.Status = data[statusOffsetV3]
+		w.Bump = data[149]
+		w.VaultBump = data[150]
+	case wagerAccountSizeV4:
+		// V4 Layout: V3 plus nonce
+		w.InvitedTaker = solana.PublicKeyFromBytes(data[invitedTakerOffsetV2 : invitedTakerOffsetV2+32])
+		w.Taker = solana.PublicKeyFromBytes(data[72:104])
+		copy(w.MatchID[:], data[matchIDOffsetV4:matchIDOffsetV4+32])
+		w.MatchIDLen = data[136]
+		w.Participant1IsHome = data[participant1IsHomeOffsetV4] != 0
+		w.MakerSide = data[makerSideOffsetV4]
+		w.TakerSide = data[takerSideOffsetV4]
+		w.Stake = uint64(data[stakeOffsetV4]) | uint64(data[stakeOffsetV4+1])<<8 | uint64(data[stakeOffsetV4+2])<<16 | uint64(data[stakeOffsetV4+3])<<24 |
+			uint64(data[stakeOffsetV4+4])<<32 | uint64(data[stakeOffsetV4+5])<<40 | uint64(data[stakeOffsetV4+6])<<48 | uint64(data[stakeOffsetV4+7])<<56
+		w.Status = data[statusOffsetV4]
+		w.Nonce = uint64(data[nonceOffsetV4]) | uint64(data[nonceOffsetV4+1])<<8 | uint64(data[nonceOffsetV4+2])<<16 | uint64(data[nonceOffsetV4+3])<<24 |
+			uint64(data[nonceOffsetV4+4])<<32 | uint64(data[nonceOffsetV4+5])<<40 | uint64(data[nonceOffsetV4+6])<<48 | uint64(data[nonceOffsetV4+7])<<56
+		w.Bump = data[bumpOffsetV4]
+		w.VaultBump = data[vaultBumpOffsetV4]
+	default:
+		return Wager{}, fmt.Errorf("unsupported wager account size: %d", len(data))
 	}
 
 	return w, nil

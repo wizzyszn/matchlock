@@ -55,6 +55,35 @@ func TestDecodeWagerAndHelpers(t *testing.T) {
 	}
 }
 
+func TestDecodeWagerV3ParticipantOrientation(t *testing.T) {
+	pubkey := solana.NewWallet().PublicKey()
+	matchID := "17952170"
+	data := make([]byte, wagerAccountSizeV3)
+	copy(data[:8], wagerDiscriminator[:])
+	copy(data[8:40], solana.NewWallet().PublicKey().Bytes())
+	copy(data[72:104], solana.NewWallet().PublicKey().Bytes())
+	copy(data[matchIDOffsetV3:matchIDOffsetV3+32], MatchIDFilterBytes(matchID))
+	data[136] = uint8(len(matchID))
+	data[participant1IsHomeOffsetV3] = 0
+	data[makerSideOffsetV3] = SideHome
+	data[takerSideOffsetV3] = SideAway
+	data[stakeOffsetV3] = 1
+	data[statusOffsetV3] = WagerStatusMatched
+	data[149] = 1
+	data[150] = 2
+
+	wager, err := DecodeWager(pubkey, data)
+	if err != nil {
+		t.Fatalf("DecodeWager: %v", err)
+	}
+	if wager.Participant1IsHome {
+		t.Fatal("expected participant1_is_home=false")
+	}
+	if wager.MakerSide != SideHome || wager.TakerSide != SideAway || wager.Stake != 1 {
+		t.Fatalf("decoded wager = %#v", wager)
+	}
+}
+
 func TestDecodeWagerRejectsInvalidDiscriminator(t *testing.T) {
 	_, err := DecodeWager(solana.NewWallet().PublicKey(), make([]byte, wagerAccountSizeV2))
 	if err == nil {
@@ -86,7 +115,7 @@ func TestWagerHelpers(t *testing.T) {
 		t.Fatal("expected winner error")
 	}
 	winner, err := wager.WinnerPubkey(SideAway)
-	if err != nil || !winner.Equals(wager.Taker) {	
+	if err != nil || !winner.Equals(wager.Taker) {
 		t.Fatalf("taker winner = %v err=%v", winner, err)
 	}
 

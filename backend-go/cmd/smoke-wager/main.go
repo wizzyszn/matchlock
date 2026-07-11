@@ -15,8 +15,8 @@ import (
 )
 
 const (
-	defaultFixtureID int64 = 17952170
-	defaultSeq       int32 = 941
+	defaultFixtureID int64  = 17952170
+	defaultSeq       int32  = 941
 	defaultStake     uint64 = 100_000 // 0.1 USDT (6 decimals)
 	solTopUpLamports uint64 = 50_000_000
 )
@@ -28,7 +28,6 @@ func main() {
 	if err != nil {
 		exitErr("config: %w", err)
 	}
-
 
 	keeper, err := chainsol.LoadKeeperKeypairFromFile(cfg.KeeperKeypairPath)
 	if err != nil {
@@ -72,10 +71,12 @@ func main() {
 	matchID := fmt.Sprintf("%d", envInt64("SMOKE_FIXTURE_ID", defaultFixtureID))
 	makerSide := chainsol.SideHome
 	wagerPDA, makeSig, err := client.MakeWager(ctx, chainsol.MakeWagerParams{
-		Maker:     maker.PrivateKey,
-		MatchID:   matchID,
-		Stake:     defaultStake,
-		MakerSide: makerSide,
+		Maker:              maker.PrivateKey,
+		MatchID:            matchID,
+		Stake:              defaultStake,
+		MakerSide:          makerSide,
+		Participant1IsHome: true,
+		Nonce:              uint64(time.Now().UnixNano()),
 	})
 	if err != nil {
 		exitErr("make_wager: %w", err)
@@ -210,4 +211,3 @@ func exitErr(format string, args ...any) {
 	fmt.Fprintf(os.Stderr, format+"\n", args...)
 	os.Exit(1)
 }
-
