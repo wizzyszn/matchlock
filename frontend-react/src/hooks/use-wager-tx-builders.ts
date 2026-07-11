@@ -28,19 +28,21 @@ export function useWagerTxBuilders() {
       matchId: string
       stake: bigint
       makerSide: Side
+      participant1IsHome: boolean
       invitedTaker?: PublicKey
     }) => {
       if (!wallet?.publicKey || !program) return null
-      return buildMakeWagerTransaction({
+      return (await buildMakeWagerTransaction({
         program,
         connection,
         wallet,
         matchId: input.matchId,
         stake: input.stake,
         makerSide: input.makerSide,
+        participant1IsHome: input.participant1IsHome,
         stablecoinMint,
         invitedTaker: input.invitedTaker,
-      })
+      })).tx
     },
     [connection, program, stablecoinMint, wallet],
   )

@@ -11,7 +11,7 @@ export function HistoryPage() {
           Challenge History
         </h2>
         <p className="mt-2 max-w-prose text-sm text-muted-foreground">
-          Review your settled and voided challenges.
+          Review open, matched, settled, and voided bets with status, result, and date filters.
         </p>
       </div>
       <ChallengeHistoryPanel />

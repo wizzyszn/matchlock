@@ -6,8 +6,6 @@ import logoUrl from "@/assets/g17.svg";
 import { UserAccountMenu } from "@/components/auth/user-account-menu";
 import { ClusterBadge } from "@/components/wallet/ClusterBadge";
 import { WalletConnectWarningBanner } from "@/components/wallet/wallet-connect-warning-banner";
-import { Badge } from "@/components/ui/badge";
-import { useHealthQuery } from "@/hooks/queries/use-health";
 import { cn } from "@/lib/utils";
 import { buttonVariants } from "@/components/ui/button";
 
@@ -15,33 +13,13 @@ const NAV_ITEMS = [
   { to: "/markets", label: "Markets" },
 
   { to: "/open", label: "Open" },
-  { to: "/my-wagers", label: "My wagers" },
+  { to: "/my-wagers", label: "Wagers" },
   { to: "/history", label: "History" },
   { to: "/invites", label: "Challenges" },
   { to: "/leaderboard", label: "Leaderboard" },
   { to: "/profile", label: "Profile" },
 ] as const;
 
-function BackendStatus() {
-  const { isPending, isSuccess, error } = useHealthQuery();
-
-  if (isPending) {
-    return <Badge variant="outline">Checking API…</Badge>;
-  }
-
-  if (isSuccess) {
-    return <Badge variant="outline">API online</Badge>;
-  }
-
-  return (
-    <Badge
-      variant="destructive"
-      title={error instanceof Error ? error.message : undefined}
-    >
-      API offline
-    </Badge>
-  );
-}
 
 export interface AppShellProps {
   children: ReactNode;
@@ -62,7 +40,7 @@ export function AppShell({ children }: AppShellProps) {
             </NavLink>
             <div className="hidden items-center gap-2 sm:flex">
               <ClusterBadge />
-              <BackendStatus />
+              
             </div>
           </div>
           <UserAccountMenu />
@@ -71,7 +49,7 @@ export function AppShell({ children }: AppShellProps) {
         <div className="mx-auto flex max-w-5xl flex-col gap-3 px-4 pb-3 sm:hidden">
           <div className="flex gap-2">
             <ClusterBadge />
-            <BackendStatus />
+     
           </div>
         </div>
 

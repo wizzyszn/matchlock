@@ -6,6 +6,16 @@ export type WagerListParams = {
   wallet?: string
 }
 
+export type WagerHistoryListParams = {
+  wallet: string
+  settlement_status?: 'settled' | 'unsettled'
+  outcome?: 'won' | 'lost' | 'void'
+  from?: number
+  to?: number
+  offset?: number
+  limit?: number
+}
+
 export const queryKeys = {
   health: ['health'] as const,
   matches: {
@@ -14,6 +24,7 @@ export const queryKeys = {
   },
   wagers: {
     list: (params: WagerListParams = {}) => ['wagers', params] as const,
+    history: (params: WagerHistoryListParams) => ['wagers', 'history', params] as const,
     detail: (pubkey: string) => ['wagers', pubkey] as const,
     settlement: (pubkey: string) => ['wagers', pubkey, 'settlement'] as const,
   },

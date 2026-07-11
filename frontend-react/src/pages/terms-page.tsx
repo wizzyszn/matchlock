@@ -1,18 +1,19 @@
 import { Link } from 'react-router-dom'
 import { ArrowLeft } from 'lucide-react'
 
-import { Button } from '@/components/ui/button'
+import { buttonVariants } from '@/components/ui/button'
 
 export function TermsPage() {
   return (
     <div className="mx-auto min-h-svh max-w-3xl px-4 py-12 sm:py-16">
       <div className="mb-8">
-        <Button variant="ghost" size="sm" asChild>
-          <Link to="/login" className="gap-2">
-            <ArrowLeft className="size-4" />
-            Back to login
-          </Link>
-        </Button>
+        <Link
+          to="/login"
+          className={buttonVariants({ variant: 'ghost', size: 'sm', className: 'gap-2' })}
+        >
+          <ArrowLeft className="size-4" />
+          Back to login
+        </Link>
       </div>
 
       <h1 className="font-heading mb-3 text-4xl tracking-tight">

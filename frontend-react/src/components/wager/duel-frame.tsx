@@ -6,6 +6,7 @@ export interface DuelFrameProps {
   away: string
   league?: string
   isLive?: boolean
+  scoreLine?: string
   size?: 'editorial' | 'compact' | 'dense'
   layout?: 'stack' | 'inline'
   className?: string
@@ -70,6 +71,7 @@ export function DuelFrame({
   away,
   league,
   isLive = false,
+  scoreLine,
   size = 'compact',
   layout = 'stack',
   className,
@@ -102,12 +104,24 @@ export function DuelFrame({
       {isInline ? (
         <div className="grid grid-cols-[1fr_auto_1fr] items-center gap-2 sm:gap-3">
           <TeamBlock name={home} size={size} inline align="end" />
-          <p
-            className="px-0.5 text-[10px] font-medium tracking-widest text-muted-foreground uppercase"
-            aria-hidden
-          >
-            vs
-          </p>
+          {scoreLine ? (
+            <p
+              className={cn(
+                'min-w-10 px-0.5 text-center font-semibold leading-none tabular-nums text-foreground',
+                size === 'dense' ? 'text-sm' : 'text-base',
+              )}
+              aria-label={`Score ${scoreLine}`}
+            >
+              {scoreLine}
+            </p>
+          ) : (
+            <p
+              className="px-0.5 text-[10px] font-medium tracking-widest text-muted-foreground uppercase"
+              aria-hidden
+            >
+              vs
+            </p>
+          )}
           <TeamBlock name={away} size={size} inline />
         </div>
       ) : (

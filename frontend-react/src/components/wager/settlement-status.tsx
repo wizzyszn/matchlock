@@ -1,4 +1,4 @@
-import { CheckCircle2, Clock, ExternalLink, Loader2, Trophy } from 'lucide-react'
+import { Clock, ExternalLink, Loader2, Trophy } from 'lucide-react'
 import { useMemo } from 'react'
 
 import { useWagerSettlementQuery } from '@/hooks/queries/use-wagers'
@@ -26,23 +26,23 @@ const STATE_COPY: Record<
     preMatch
       ? {
           title: 'Match not started yet',
-          detail: "The fixture hasn't kicked off. We'll track it live and settle your wager once the result is confirmed.",
+          detail: "The fixture hasn't kicked off. Payout status updates once the result is confirmed.",
         }
       : {
           title: 'Match in progress',
-          detail: "We're tracking the fixture. Your wager settles automatically once the final result is confirmed.",
+          detail: 'Payout status updates once the final result is confirmed.',
         },
   match_ended_unverified: () => ({
     title: 'Confirming final score',
     detail: 'Payout starts as soon as the official result is verified.',
   }),
   queued: () => ({
-    title: 'Settlement in progress',
-    detail: 'Your payout is being processed on-chain.',
+    title: 'Ready to settle',
+    detail: 'The final result is verified. The winner can claim the payout.',
   }),
   retrying: () => ({
     title: 'Settlement in progress',
-    detail: 'Your payout is being processed on-chain.',
+    detail: 'The final result is verified. Settlement is being processed on-chain.',
   }),
   failed: () => ({
     title: 'Settlement in progress',
@@ -60,7 +60,7 @@ function toneForState(state: SettlementState) {
       return 'border-status-settled/25 bg-status-settled-bg text-status-settled'
     case 'match_live':
     case 'match_ended_unverified':
-      return 'border-status-matched/25 bg-status-matched-bg text-status-matched'
+      return 'border-border/60 bg-muted/30 text-muted-foreground'
     default:
       return 'border-primary/20 bg-primary/5 text-foreground'
   }
@@ -101,9 +101,7 @@ export function SettlementStatus({
       ? Trophy
       : inProgress
         ? Loader2
-        : status.state === 'match_live'
-          ? Clock
-          : CheckCircle2
+        : Clock
   const signature = status.tx_signature || lastSignature
 
   return (
