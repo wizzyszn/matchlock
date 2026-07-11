@@ -1,4 +1,4 @@
-import type { Match, Side, Wager } from '@/lib/api'
+import type { Match, SettlementState, Side, Wager, WagerSettlementStatus } from '@/lib/api'
 
 export function winningSideFromMatch(match: Match): Side | null {
   if (!match.is_final) return null
@@ -27,10 +27,15 @@ export function isWinner(
   return userBackedSide(wager, walletAddress) === outcome
 }
 
+export function isSettlementClaimable(state: SettlementState | undefined): boolean {
+  return state === 'queued' || state === 'retrying' || state === 'failed'
+}
+
 export function canClaimWinnings(
   wager: Wager,
   match: Match | undefined,
   walletAddress: string,
+  settlement?: WagerSettlementStatus,
 ): boolean {
-  return isWinner(wager, match, walletAddress)
+  return isWinner(wager, match, walletAddress) && isSettlementClaimable(settlement?.state)
 }

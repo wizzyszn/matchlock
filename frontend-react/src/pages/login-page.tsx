@@ -34,7 +34,7 @@ export function LoginPage() {
   const { requestMagicLink } = useAuthMutations()
   const [sentTo, setSentTo] = useState<string | null>(null)
   const location = useLocation()
-
+  
   const onSubmit = async ({ email }: LoginFormValues) => {
     await requestMagicLink.mutateAsync(email.trim())
     const from = (location.state as { from?: string } | null)?.from
@@ -62,7 +62,7 @@ export function LoginPage() {
             Welcome back
           </h1>
           <p className="mx-auto max-w-xs text-sm text-muted-foreground">
-            Peer-to-peer wagers on Solana- <PoweredByTxLine />   
+            Peer-to-peer wagers on Solana-
           </p>
         </div>
       </div>
@@ -134,6 +134,14 @@ export function LoginPage() {
                 </p>
               )}
 
+              <p className="text-center text-xs text-muted-foreground">
+                By signing in, you agree to our{' '}
+                <Link to="/terms" className="underline underline-offset-2 hover:text-foreground">
+                  Terms & Conditions
+                </Link>
+                .
+              </p>
+
               <Button
                 type="submit"
                 className="w-full min-h-11"
@@ -154,15 +162,11 @@ export function LoginPage() {
       </Card>
 
       <div className="space-y-1 text-center">
-        <p className="text-xs text-muted-foreground">
-          By signing in, you agree to our{' '}
-          <Link to="/terms" className="underline underline-offset-2 hover:text-foreground">
-            Terms & Conditions
-          </Link>
-          .
-        </p>
         <p className="text-xs font-medium text-amber-500/80">
           Gamble responsibly. Must be 18+.
+        </p>
+        <p className="pt-2 text-xs text-muted-foreground">
+          <PoweredByTxLine />
         </p>
       </div>
     </div>

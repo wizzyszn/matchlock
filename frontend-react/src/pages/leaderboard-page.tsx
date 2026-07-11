@@ -1,4 +1,4 @@
-import { Loader2, TrendingUp, Users, Trophy, Medal } from 'lucide-react'
+import { ChevronDown, Loader2, TrendingUp, Users, Trophy, Medal, Percent } from 'lucide-react'
 
 import {
   useLeaderboardQuery,
@@ -27,10 +27,24 @@ function PnLBadge({ value }: { value: number }) {
   )
 }
 
+const PAGE_SIZE = 20
+
 export function LeaderboardPage() {
-  const { data: entries, isLoading, isError, error } = useLeaderboardQuery()
+  const {
+    data,
+    isLoading,
+    isError,
+    error,
+    hasNextPage,
+    fetchNextPage,
+    isFetchingNextPage,
+  } = useLeaderboardQuery(PAGE_SIZE)
   const { data: myRank } = useMyLeaderboardRankQuery()
   const { data: stats } = useLeaderboardStatsQuery()
+
+  const pages = data?.pages ?? []
+  const entries = pages.flatMap((page) => page.entries)
+  const total = pages[0]?.total ?? 0
 
   if (isLoading) {
     return (
@@ -59,7 +73,7 @@ export function LeaderboardPage() {
       </div>
 
       {stats ? (
-        <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
+        <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
           <div className="rounded-lg border bg-card p-4">
             <div className="flex items-center gap-2 text-sm text-muted-foreground">
               <TrendingUp className="size-4" aria-hidden />
@@ -78,13 +92,22 @@ export function LeaderboardPage() {
               {stats.total_wagers}
             </p>
           </div>
-          <div className="col-span-2 rounded-lg border bg-card p-4 sm:col-span-1">
+          <div className="rounded-lg border bg-card p-4">
             <div className="flex items-center gap-2 text-sm text-muted-foreground">
               <Users className="size-4" aria-hidden />
               <span>Active Users</span>
             </div>
             <p className="mt-1 font-heading text-2xl font-semibold tabular-nums">
               {stats.total_users}
+            </p>
+          </div>
+          <div className="col-span-2 rounded-lg border bg-card p-4 sm:col-span-1 lg:col-span-1">
+            <div className="flex items-center gap-2 text-sm text-muted-foreground">
+              <Percent className="size-4" aria-hidden />
+              <span>Avg Win Rate</span>
+            </div>
+            <p className="mt-1 font-heading text-2xl font-semibold tabular-nums">
+              {stats.avg_win_rate.toFixed(1)}%
             </p>
           </div>
         </div>
@@ -102,7 +125,7 @@ export function LeaderboardPage() {
         </div>
       ) : null}
 
-      {entries?.length ? (
+      {entries.length ? (
         <div className="overflow-hidden rounded-lg border bg-card shadow-sahara">
           <ul className="divide-y divide-border/60">
             {entries.map((entry) => (
@@ -127,6 +150,23 @@ export function LeaderboardPage() {
               </li>
             ))}
           </ul>
+          {hasNextPage ? (
+            <div className="border-t border-border/60 px-4 py-3">
+              <button
+                type="button"
+                onClick={() => void fetchNextPage()}
+                disabled={isFetchingNextPage}
+                className="flex w-full items-center justify-center gap-2 text-sm text-muted-foreground transition-colors hover:text-foreground"
+              >
+                {isFetchingNextPage ? (
+                  <Loader2 className="size-4 animate-spin" aria-hidden />
+                ) : (
+                  <ChevronDown className="size-4" aria-hidden />
+                )}
+                Load more ({Math.max(total - entries.length, 0)} remaining)
+              </button>
+            </div>
+          ) : null}
         </div>
       ) : (
         <div className="rounded-lg border border-dashed bg-muted/40 px-6 py-12 text-center">

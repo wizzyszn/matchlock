@@ -102,6 +102,7 @@ export function MyWagerCard({
             <DuelFrame
               home={labels.homeTeam}
               away={labels.awayTeam}
+              scoreLine={labels.scoreLine}
               size="dense"
               layout="inline"
             />

@@ -58,6 +58,7 @@ export type Match = {
   fixture_group_id?: number
   participant1_id?: number
   participant2_id?: number
+  participant1_is_home: boolean
   home_team?: string
   away_team?: string
   sport_id?: number
@@ -75,6 +76,28 @@ export type Wager = {
   taker_side?: Side
   stake: number
   status: WagerStatus
+}
+
+export type WagerHistorySettlementStatus = 'settled' | 'unsettled'
+export type WagerHistoryOutcome = 'won' | 'lost' | 'void'
+
+export type WagerHistoryEntry = {
+  wager: Wager
+  match?: Match
+  settlement_status: WagerHistorySettlementStatus
+  outcome?: WagerHistoryOutcome
+  backed_side: Side
+  opponent?: string
+  is_maker: boolean
+  event_time?: number
+}
+
+export type WagerHistoryPage = {
+  entries: WagerHistoryEntry[]
+  total: number
+  offset: number
+  limit: number
+  has_more: boolean
 }
 
 export type WalletLink = {
@@ -125,6 +148,21 @@ export type LeaderboardEntry = {
   net_pnl: number
 }
 
+export type LeaderboardPage = {
+  entries: LeaderboardEntry[]
+  total: number
+  offset: number
+  limit: number
+  has_more: boolean
+}
+
+export type LeaderboardStats = {
+  total_users: number
+  total_wagers: number
+  total_volume: number
+  avg_win_rate: number
+}
+
 export type WagerInvite = {
   id: string
   maker_email: string
@@ -171,6 +209,16 @@ type ListWagersParams = {
   match_id?: string
   status?: WagerStatus
   wallet?: string
+}
+
+type ListWagerHistoryParams = {
+  wallet: string
+  settlement_status?: WagerHistorySettlementStatus
+  outcome?: WagerHistoryOutcome
+  from?: number
+  to?: number
+  offset?: number
+  limit?: number
 }
 
 export class MatchlockApi {
@@ -234,6 +282,20 @@ export class MatchlockApi {
     if (params.wallet) search.set('wallet', params.wallet)
     const query = search.toString()
     return this.request<Wager[]>(`/wagers${query ? `?${query}` : ''}`)
+  }
+
+  listWagerHistory(params: ListWagerHistoryParams) {
+    const search = new URLSearchParams()
+    search.set('wallet', params.wallet)
+    if (params.settlement_status) {
+      search.set('settlement_status', params.settlement_status)
+    }
+    if (params.outcome) search.set('outcome', params.outcome)
+    if (params.from !== undefined) search.set('from', String(params.from))
+    if (params.to !== undefined) search.set('to', String(params.to))
+    if (params.offset !== undefined) search.set('offset', String(params.offset))
+    if (params.limit !== undefined) search.set('limit', String(params.limit))
+    return this.request<WagerHistoryPage>(`/wagers/history?${search.toString()}`)
   }
 
   getWager(pubkey: string) {
@@ -372,9 +434,9 @@ export class MatchlockApi {
     )
   }
 
-  getLeaderboard(limit = 20) {
-    return this.request<LeaderboardEntry[]>(
-      `/leaderboard?limit=${limit}`,
+  getLeaderboard(offset = 0, limit = 20) {
+    return this.request<LeaderboardPage>(
+      `/leaderboard?offset=${offset}&limit=${limit}`,
     )
   }
 
@@ -385,8 +447,16 @@ export class MatchlockApi {
   }
 
   getLeaderboardStats() {
-    return this.request<{ total_wagers: number; total_volume: number; total_users: number }>(
-      '/leaderboard/stats',
+    return this.request<LeaderboardStats>('/leaderboard/stats')
+  }
+
+  syncLeaderboardSettlement(wagerPubkey: string, txSignature?: string) {
+    const search = new URLSearchParams()
+    if (txSignature) search.set('tx_signature', txSignature)
+    const query = search.toString()
+    return this.request<{ synced: boolean }>(
+      `/leaderboard/wagers/${encodeURIComponent(wagerPubkey)}/sync${query ? `?${query}` : ''}`,
+      { method: 'POST' },
     )
   }
 

@@ -11,7 +11,7 @@ import {
 } from '@/components/wager/confirm-tx-dialog'
 import { MyWagerCard } from '@/components/wager/my-wager-card'
 import { useMatchesQuery } from '@/hooks/queries/use-matches'
-import { useWagersQuery } from '@/hooks/queries/use-wagers'
+import { useWagerSettlementQuery, useWagersQuery } from '@/hooks/queries/use-wagers'
 import { useWagerMutations } from '@/hooks/mutations/use-wager-mutations'
 import { useApi } from '@/hooks/use-api'
 import type { Match, Wager } from '@/lib/api'
@@ -214,42 +214,18 @@ export function MyWagersPanel() {
   return (
     <>
       <ul className="grid list-none gap-3 sm:grid-cols-2 lg:grid-cols-3">
-        {myWagers.map((wager) => {
-          const match = matchMap.get(wager.match_id)
-          const labels = match ? matchLabels(match) : null
-          const claimable = canClaimWinnings(wager, match, walletAddress)
-          const backed = match
-            ? sideLabel(userBackedSide(wager, walletAddress), match)
-            : userBackedSide(wager, walletAddress)
-
-          return (
-            <li key={wager.pubkey}>
-              <MyWagerCard
-                wager={wager}
-                match={match}
-                walletAddress={walletAddress}
-                claimable={claimable}
-                claimPending={claimWager.isPending}
-                onSelect={() => navigate(`/my-wagers/${wager.pubkey}`)}
-                onClaim={() =>
-                  openClaim(
-                    wager.pubkey,
-                    baseUnitsToUsdc(wager.stake),
-                    labels?.league ?? `Match ${wager.match_id}`,
-                    backed,
-                  )
-                }
-                onCancel={() =>
-                  openCancel(
-                    wager,
-                    baseUnitsToUsdc(wager.stake),
-                    labels?.league ?? `Match ${wager.match_id}`,
-                  )
-                }
-              />
-            </li>
-          )
-        })}
+        {myWagers.map((wager) => (
+          <MyWagerListItem
+            key={wager.pubkey}
+            wager={wager}
+            match={matchMap.get(wager.match_id)}
+            walletAddress={walletAddress}
+            claimPending={claimWager.isPending}
+            onSelect={() => navigate(`/my-wagers/${wager.pubkey}`)}
+            onClaim={openClaim}
+            onCancel={openCancel}
+          />
+        ))}
       </ul>
 
       <ConfirmTxDialog
@@ -264,5 +240,67 @@ export function MyWagersPanel() {
         onConfirm={() => void handleConfirm()}
       />
     </>
+  )
+}
+
+type MyWagerListItemProps = {
+  wager: Wager
+  match?: Match
+  walletAddress: string
+  claimPending: boolean
+  onSelect: () => void
+  onClaim: (
+    wagerPubkey: string,
+    stakeUsdc: number,
+    matchLabel: string,
+    side: string,
+  ) => void
+  onCancel: (wager: Wager, stakeUsdc: number, matchLabel: string) => void
+}
+
+function MyWagerListItem({
+  wager,
+  match,
+  walletAddress,
+  claimPending,
+  onSelect,
+  onClaim,
+  onCancel,
+}: MyWagerListItemProps) {
+  const { data: settlement } = useWagerSettlementQuery(
+    wager.status === 'matched' ? wager.pubkey : undefined,
+  )
+  const labels = match ? matchLabels(match) : null
+  const claimable = canClaimWinnings(wager, match, walletAddress, settlement)
+  const backed = match
+    ? sideLabel(userBackedSide(wager, walletAddress), match)
+    : userBackedSide(wager, walletAddress)
+
+  return (
+    <li>
+      <MyWagerCard
+        wager={wager}
+        match={match}
+        walletAddress={walletAddress}
+        claimable={claimable}
+        claimPending={claimPending}
+        onSelect={onSelect}
+        onClaim={() =>
+          onClaim(
+            wager.pubkey,
+            baseUnitsToUsdc(wager.stake),
+            labels?.league ?? `Match ${wager.match_id}`,
+            backed,
+          )
+        }
+        onCancel={() =>
+          onCancel(
+            wager,
+            baseUnitsToUsdc(wager.stake),
+            labels?.league ?? `Match ${wager.match_id}`,
+          )
+        }
+      />
+    </li>
   )
 }

@@ -2,7 +2,11 @@ import { useQuery } from '@tanstack/react-query'
 
 import { ApiClientError } from '@/lib/api'
 import { useApi } from '@/hooks/use-api'
-import { queryKeys, type WagerListParams } from '@/lib/query-keys'
+import {
+  queryKeys,
+  type WagerHistoryListParams,
+  type WagerListParams,
+} from '@/lib/query-keys'
 import { useOptimisticWagersStore } from '@/stores/optimistic-wagers-store'
 
 export function useWagersQuery(params: WagerListParams = {}) {
@@ -11,6 +15,19 @@ export function useWagersQuery(params: WagerListParams = {}) {
   return useQuery({
     queryKey: queryKeys.wagers.list(params),
     queryFn: () => api.listWagers(params),
+    refetchInterval: 10_000,
+  })
+}
+
+export function useWagerHistoryQuery(
+  params: WagerHistoryListParams | undefined,
+) {
+  const api = useApi()
+
+  return useQuery({
+    queryKey: params ? queryKeys.wagers.history(params) : ['wagers', 'history', 'idle'],
+    queryFn: () => api.listWagerHistory(params!),
+    enabled: Boolean(params?.wallet),
     refetchInterval: 10_000,
   })
 }

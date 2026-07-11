@@ -12,7 +12,7 @@ import { OutcomePicker } from '@/components/wager/outcome-picker'
 import { SettlementStatus } from '@/components/wager/settlement-status'
 import { WagerStatusBadge } from '@/components/wager/wager-status-badge'
 import { useMatchesQuery } from '@/hooks/queries/use-matches'
-import { useWagerQuery } from '@/hooks/queries/use-wagers'
+import { useWagerQuery, useWagerSettlementQuery } from '@/hooks/queries/use-wagers'
 import { useWagerMutations } from '@/hooks/mutations/use-wager-mutations'
 import { useApi } from '@/hooks/use-api'
 import { useStablecoinLabel } from '@/hooks/use-stablecoin-label'
@@ -33,6 +33,9 @@ export function WagerDetailPage() {
   const walletAddress = publicKey?.toBase58()
   const config = useConfig()
   const { data: wager, isLoading, isError, error } = useWagerQuery(wagerPubkey)
+  const { data: settlement } = useWagerSettlementQuery(
+    wager?.status === 'matched' ? wager.pubkey : undefined,
+  )
   const { data: matches } = useMatchesQuery()
   const stablecoin = useStablecoinLabel()
   const api = useApi()
@@ -48,7 +51,7 @@ export function WagerDetailPage() {
 
   const isMaker = walletAddress ? wager?.maker === walletAddress : false
   const canCancel = Boolean(isMaker && wager?.status === 'open')
-  const claimable = wager ? canClaimWinnings(wager, match, walletAddress ?? '') : false
+  const claimable = wager ? canClaimWinnings(wager, match, walletAddress ?? '', settlement) : false
 
   const roleLabel = useMemo(() => {
     if (!wager || !walletAddress) return ''

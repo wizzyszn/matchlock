@@ -22,6 +22,24 @@ import {
 
 export type TxAction = "make" | "accept" | "cancel" | "claim";
 
+async function syncLeaderboardClaim(
+  sync: (wagerPubkey: string, txSignature?: string) => Promise<{ synced: boolean }>,
+  wagerPubkey: string,
+  txSignature: string,
+) {
+  for (let attempt = 0; attempt < 5; attempt += 1) {
+    try {
+      await sync(wagerPubkey, txSignature);
+      return;
+    } catch {
+      if (attempt === 4) {
+        return;
+      }
+      await new Promise((resolve) => window.setTimeout(resolve, 1_500 * (attempt + 1)));
+    }
+  }
+}
+
 export function useWagerMutations() {
   const { connection } = useConnection();
   const wallet = useAnchorWallet();
@@ -71,6 +89,7 @@ export function useWagerMutations() {
       matchId: string;
       stake: bigint;
       makerSide: Side;
+      participant1IsHome: boolean;
       invitedTaker?: PublicKey;
     }) => {
       if (!wallet?.publicKey) {
@@ -88,19 +107,15 @@ export function useWagerMutations() {
       }
       const program = getProgram(connection, wallet);
       const stablecoinMint = getUsdcMint(config);
-      const matchBytes = Buffer.from(input.matchId, "utf8");
-      const [wagerPubkey] = PublicKey.findProgramAddressSync(
-        [Buffer.from("wager"), wallet.publicKey.toBuffer(), matchBytes],
-        program.programId,
-      );
 
-      const tx = await buildMakeWagerTransaction({
+      const { tx, wagerPubkey } = await buildMakeWagerTransaction({
         program,
         connection,
         wallet,
         matchId: input.matchId,
         stake: input.stake,
         makerSide: input.makerSide,
+        participant1IsHome: input.participant1IsHome,
         stablecoinMint,
         invitedTaker: input.invitedTaker,
       });
@@ -274,6 +289,13 @@ export function useWagerMutations() {
           return { ...old, state: "settled", message: "Winnings have been sent" };
         },
       );
+      void syncLeaderboardClaim(
+        (wagerPubkey, txSignature) => api.syncLeaderboardSettlement(wagerPubkey, txSignature),
+        data.wagerPubkey,
+        data.signature,
+      ).finally(() => {
+        void queryClient.invalidateQueries({ queryKey: ["leaderboard"] });
+      });
       invalidateWagers();
     },
   });

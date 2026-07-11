@@ -148,6 +148,7 @@ function ChallengeSlipBody({
       matchId: match.match_id,
       stake: usdcToBaseUnits(stakeUsdc),
       makerSide: side,
+      participant1IsHome: match.participant1_is_home,
       invitedTaker,
     })
   }, [
@@ -156,6 +157,7 @@ function ChallengeSlipBody({
     confirmDetails,
     friendLookup?.primary_wallet,
     match.match_id,
+    match.participant1_is_home,
     side,
     stakeUsdc,
     stakeValid,
@@ -180,6 +182,7 @@ function ChallengeSlipBody({
         matchId: match.match_id,
         stake: usdcToBaseUnits(stakeUsdc),
         makerSide: side,
+        participant1IsHome: match.participant1_is_home,
         invitedTaker,
       })
 

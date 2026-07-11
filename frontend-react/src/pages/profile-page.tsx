@@ -171,7 +171,7 @@ export function ProfilePage() {
                  </p>
               ) : (
                 <div className="flex flex-wrap items-center justify-between gap-3 text-sm">
-                   <p className="text-amber-950/80">
+                   <p className="text-red-400">
                      Link this wallet to your account to use it for wagers.
                    </p>
                    <Button

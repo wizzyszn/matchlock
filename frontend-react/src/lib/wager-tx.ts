@@ -50,10 +50,13 @@ function findWagerPda(
   programId: PublicKey,
   maker: PublicKey,
   matchId: string,
+  nonce: bigint,
 ): PublicKey {
   const matchBytes = Buffer.from(matchId, 'utf8')
+  const nonceBuf = Buffer.alloc(8)
+  nonceBuf.writeBigUInt64LE(nonce)
   const [pda] = PublicKey.findProgramAddressSync(
-    [Buffer.from('wager'), maker.toBuffer(), matchBytes],
+    [Buffer.from('wager'), maker.toBuffer(), matchBytes, nonceBuf],
     programId,
   )
   return pda
@@ -164,8 +167,15 @@ export type MakeWagerParams = {
   matchId: string
   stake: bigint
   makerSide: Side
+  participant1IsHome: boolean
   stablecoinMint: PublicKey
   invitedTaker?: PublicKey
+  nonce?: bigint
+}
+
+export type BuildMakeWagerTransactionResult = {
+  tx: Transaction
+  wagerPubkey: PublicKey
 }
 
 export async function buildMakeWagerTransaction({
@@ -174,13 +184,15 @@ export async function buildMakeWagerTransaction({
   matchId,
   stake,
   makerSide,
+  participant1IsHome,
   stablecoinMint,
   invitedTaker,
-}: MakeWagerParams): Promise<Transaction> {
+  nonce = BigInt(Date.now()),
+}: MakeWagerParams): Promise<BuildMakeWagerTransactionResult> {
   const maker = wallet.publicKey
   const matchBytes = Buffer.from(matchId, 'utf8')
   const config = findConfigPda(program.programId)
-  const wager = findWagerPda(program.programId, maker, matchId)
+  const wager = findWagerPda(program.programId, maker, matchId, nonce)
   const vault = findVaultPda(program.programId, wager)
   const makerStablecoin = getAssociatedTokenAddressSync(stablecoinMint, maker)
 
@@ -197,6 +209,8 @@ export async function buildMakeWagerTransaction({
       new BN(stake.toString()),
       toAnchorSide(makerSide),
       invitedTaker ?? PublicKey.default,
+      participant1IsHome,
+      new BN(nonce.toString()),
     )
     .accounts({
       maker,
@@ -211,7 +225,7 @@ export async function buildMakeWagerTransaction({
     })
     .instruction()
 
-  return new Transaction().add(createAtaIx, makeIx)
+  return { tx: new Transaction().add(createAtaIx, makeIx), wagerPubkey: wager }
 }
 
 export type AcceptWagerParams = {
