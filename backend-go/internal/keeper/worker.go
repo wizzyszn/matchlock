@@ -106,23 +106,35 @@ func (w *Worker) SettleMatch(ctx context.Context, update txline.ScoreUpdate) err
 		return nil
 	}
 
-	validation, statKey, err := w.fetchWinStatValidation(ctx, update.FixtureID, update.Seq, winningSide, update.Participant1IsHome)
-	if err != nil {
-		return fmt.Errorf("fetch validation: %w", err)
-	}
-	slog.Debug("resolved outcome stat",
-		"match_id", matchID,
-		"fixture_id", update.FixtureID,
-		"seq", update.Seq,
-		"winning_side", winningSide,
-		"stat_key", statKey,
-	)
-	args, merkleRoot, err := chainsol.ValidationFromAPI(validation)
-	if err != nil {
-		return fmt.Errorf("map validation: %w", err)
-	}
-
 	for _, wager := range wagers {
+		validation, statKey, err := w.fetchDeclaredWinStatValidation(ctx, update.FixtureID, update.Seq, winningSide, wager.Participant1IsHome)
+		if err != nil {
+			slog.Error("fetch settlement proof failed",
+				"match_id", matchID,
+				"wager", wager.Pubkey.String(),
+				"err", err,
+			)
+			w.enqueuePendingSettlement(ctx, update, wager, err)
+			continue
+		}
+		slog.Debug("resolved outcome stat",
+			"match_id", matchID,
+			"fixture_id", update.FixtureID,
+			"seq", update.Seq,
+			"winning_side", winningSide,
+			"stat_key", statKey,
+			"wager", wager.Pubkey.String(),
+		)
+		args, merkleRoot, err := chainsol.ValidationFromAPI(validation)
+		if err != nil {
+			slog.Error("map settlement proof failed",
+				"match_id", matchID,
+				"wager", wager.Pubkey.String(),
+				"err", err,
+			)
+			w.enqueuePendingSettlement(ctx, update, wager, err)
+			continue
+		}
 		if err := w.settleOne(ctx, matchID, wager, args, merkleRoot, winningSide); err != nil {
 			slog.Error("settle wager failed",
 				"match_id", matchID,
@@ -197,10 +209,14 @@ func (w *Worker) settleOne(
 			loserPubkey = wager.Taker
 		}
 		if err := w.Leaderboard.RecordSettlement(ctx, leaderboard.SettlementEvent{
+			WagerPubkey:  wager.Pubkey.String(),
 			WinnerPubkey: winnerPubkey.String(),
 			LoserPubkey:  loserPubkey.String(),
 			Stake:        wager.Stake,
 			MatchID:      matchID,
+			TxSignature:  sig.String(),
+			WinningSide:  winningSide,
+			SettledAt:    time.Now().UTC(),
 		}); err != nil {
 			slog.Warn("leaderboard record failed",
 				"match_id", matchID,

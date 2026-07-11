@@ -13,16 +13,16 @@ import (
 
 // SettlementProof is the payload a winner wallet needs to submit settle_wager.
 type SettlementProof struct {
-	WinningSide     uint8  `json:"winning_side_code"`
-	WinningSideName string `json:"winning_side"`
-	FixtureID       int64  `json:"fixture_id"`
-	Seq             int32  `json:"seq"`
-	StatKey         uint32 `json:"stat_key"`
+	WinningSide     uint8                 `json:"winning_side_code"`
+	WinningSideName string                `json:"winning_side"`
+	FixtureID       int64                 `json:"fixture_id"`
+	Seq             int32                 `json:"seq"`
+	StatKey         uint32                `json:"stat_key"`
 	Validation      txline.StatValidation `json:"validation"`
-	MerkleRoot      string `json:"merkle_root"`
-	EpochDay        uint16 `json:"epoch_day"`
-	DailyScoresPDA  string `json:"daily_scores_pda"`
-	TxlineProgramID string `json:"txline_program_id"`
+	MerkleRoot      string                `json:"merkle_root"`
+	EpochDay        uint16                `json:"epoch_day"`
+	DailyScoresPDA  string                `json:"daily_scores_pda"`
+	TxlineProgramID string                `json:"txline_program_id"`
 }
 
 // TxlineProgramLookup supplies the TxLINE program id for PDA derivation.
@@ -37,7 +37,7 @@ type ProofBuilder struct {
 	Solana TxlineProgramLookup
 }
 
-// BuildForWager returns settlement proof data when the match is final and scores are known.
+// BuildForWager returns settlement proof data when the match has a TxLINE-verified final score.
 func (b *ProofBuilder) BuildForWager(ctx context.Context, wager chainsol.Wager) (SettlementProof, error) {
 	if wager.Status != chainsol.WagerStatusMatched {
 		return SettlementProof{}, fmt.Errorf("wager status is not matched")
@@ -53,20 +53,20 @@ func (b *ProofBuilder) BuildForWager(ctx context.Context, wager chainsol.Wager) 
 	}
 
 	worker := &Worker{Cache: b.Cache, Txline: b.Txline}
-	update := worker.hydratePendingScoreUpdate(ctx, match.FixtureID, match.GameState, match.Seq, func() txline.ScoreUpdate {
-		fallback, err := cache.ScoreUpdateFromMatch(match)
-		if err != nil {
-			return txline.ScoreUpdate{FixtureID: match.FixtureID, Seq: match.Seq, GameState: match.GameState}
-		}
-		return fallback
-	})
+	refreshed, update, err := worker.RefreshVerifiedFinal(ctx, match)
+	if err != nil {
+		return SettlementProof{}, fmt.Errorf("match %s final score is not verified: %w", matchID, err)
+	}
+	if refreshed.FinalSource != cache.FinalSourceTxline {
+		return SettlementProof{}, fmt.Errorf("match %s final score is not verified", matchID)
+	}
 
 	winningSide, ok := winningSideFromScore(update)
 	if !ok {
 		return SettlementProof{}, fmt.Errorf("cannot determine winning side for match %s", matchID)
 	}
 
-	validation, statKey, err := worker.fetchWinStatValidation(ctx, update.FixtureID, update.Seq, winningSide, update.Participant1IsHome)
+	validation, statKey, err := worker.fetchDeclaredWinStatValidation(ctx, update.FixtureID, update.Seq, winningSide, wager.Participant1IsHome)
 	if err != nil {
 		return SettlementProof{}, err
 	}

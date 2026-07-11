@@ -29,7 +29,7 @@ func (w *Worker) hydratePendingScoreUpdate(
 	if w.Txline != nil && itemFixtureID != 0 {
 		rows, err := w.Txline.FetchScoreSnapshot(ctx, itemFixtureID)
 		if err == nil {
-			if row, err := txline.LatestScoreSnapshot(rows); err == nil {
+			if row, err := latestSettlementSnapshot(rows); err == nil {
 				if update, err := row.ToScoreUpdate(); err == nil {
 					return update
 				}
@@ -37,4 +37,11 @@ func (w *Worker) hydratePendingScoreUpdate(
 		}
 	}
 	return matchFallback()
+}
+
+func latestSettlementSnapshot(rows []txline.ScoreSnapshotRow) (txline.ScoreSnapshotRow, error) {
+	if row, err := txline.LatestFinalSnapshot(rows); err == nil {
+		return row, nil
+	}
+	return txline.LatestScoreSnapshot(rows)
 }

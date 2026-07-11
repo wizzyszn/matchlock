@@ -49,14 +49,13 @@ func (r *ReconcileWorker) Run(ctx context.Context) error {
 }
 
 func (r *ReconcileWorker) reconcileOnce(ctx context.Context, batch int) {
-	if !r.Worker.AutoSettle {
-		return
-	}
 	if err := r.Worker.ReconcileFinalMatches(ctx); err != nil {
 		slog.Error("reconcile final matches failed", "err", err)
 	}
-	if err := r.Worker.ProcessPendingQueue(ctx, batch); err != nil {
-		slog.Error("process pending settlement queue failed", "err", err)
+	if r.Worker.AutoSettle {
+		if err := r.Worker.ProcessPendingQueue(ctx, batch); err != nil {
+			slog.Error("process pending settlement queue failed", "err", err)
+		}
 	}
 }
 
@@ -71,16 +70,61 @@ func (w *Worker) ReconcileFinalMatches(ctx context.Context) error {
 		if !match.IsFinal {
 			continue
 		}
-		update, err := w.resolveFinalUpdate(ctx, match)
+		_, update, err := w.RefreshVerifiedFinal(ctx, match)
 		if err != nil {
 			slog.Debug("skip reconcile match", "match_id", match.MatchID, "err", err)
 			continue
 		}
-		if err := w.SettleMatch(ctx, update); err != nil {
-			slog.Error("reconcile settle match failed", "match_id", match.MatchID, "err", err)
+		if w.AutoSettle {
+			if err := w.SettleMatch(ctx, update); err != nil {
+				slog.Error("reconcile settle match failed", "match_id", match.MatchID, "err", err)
+			}
 		}
 	}
 	return nil
+}
+
+// RefreshVerifiedFinal upgrades a cached final match to a TxLINE-verified final
+// by fetching final score snapshots when the SSE final event was missed.
+func (w *Worker) RefreshVerifiedFinal(ctx context.Context, match cache.Match) (cache.Match, txline.ScoreUpdate, error) {
+	update, err := w.resolveFinalUpdate(ctx, match)
+	if err != nil {
+		return match, txline.ScoreUpdate{}, err
+	}
+	refreshed := cache.ApplyScoreUpdate(match, update)
+	if shouldPersistVerifiedFinal(match, refreshed) {
+		if err := w.Cache.UpsertMatch(ctx, refreshed); err != nil {
+			return match, txline.ScoreUpdate{}, fmt.Errorf("upsert verified final match: %w", err)
+		}
+		if err := w.Cache.PublishMatchUpdate(ctx, refreshed); err != nil {
+			slog.Debug("publish verified final match failed", "match_id", match.MatchID, "err", err)
+		}
+	}
+	return refreshed, update, nil
+}
+
+func shouldPersistVerifiedFinal(before, after cache.Match) bool {
+	if after.FinalSource != cache.FinalSourceTxline {
+		return false
+	}
+	if before.FinalSource != after.FinalSource ||
+		before.IsFinal != after.IsFinal ||
+		before.GameState != after.GameState ||
+		before.Seq != after.Seq {
+		return true
+	}
+	if goalValue(before.HomeGoals) != goalValue(after.HomeGoals) ||
+		goalValue(before.AwayGoals) != goalValue(after.AwayGoals) {
+		return true
+	}
+	return false
+}
+
+func goalValue(v *int32) string {
+	if v == nil {
+		return ""
+	}
+	return fmt.Sprint(*v)
 }
 
 func (w *Worker) resolveFinalUpdate(ctx context.Context, match cache.Match) (txline.ScoreUpdate, error) {

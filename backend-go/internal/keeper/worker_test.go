@@ -13,10 +13,10 @@ import (
 )
 
 type memCache struct {
-	matches   map[string]cache.Match
-	finals    map[string]bool
-	settled   map[string]cache.SettlementRecord
-	pending   map[string]cache.PendingSettlement
+	matches map[string]cache.Match
+	finals  map[string]bool
+	settled map[string]cache.SettlementRecord
+	pending map[string]cache.PendingSettlement
 }
 
 func newMemCache() *memCache {
@@ -106,8 +106,11 @@ func (m *memCache) PublishMatchUpdate(ctx context.Context, match cache.Match) er
 }
 
 type fakeTxline struct {
-	calls int
-	err   error
+	calls         int
+	err           error
+	lastFixtureID int64
+	lastSeq       int32
+	lastStatKey   uint32
 }
 
 func (f *fakeTxline) FetchScoreSnapshot(ctx context.Context, fixtureID int64) ([]txline.ScoreSnapshotRow, error) {
@@ -116,6 +119,9 @@ func (f *fakeTxline) FetchScoreSnapshot(ctx context.Context, fixtureID int64) ([
 
 func (f *fakeTxline) FetchStatValidation(ctx context.Context, fixtureID int64, seq int32, statKey uint32) (txline.StatValidation, error) {
 	f.calls++
+	f.lastFixtureID = fixtureID
+	f.lastSeq = seq
+	f.lastStatKey = statKey
 	if f.err != nil {
 		return txline.StatValidation{}, f.err
 	}
@@ -130,8 +136,17 @@ func (f *fakeTxline) FetchStatValidation(ctx context.Context, fixtureID int64, s
 			EventStatsSubTreeRoot: "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=",
 		},
 		EventStatRoot: "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=",
-		StatToProve: txline.ScoreStatResponse{Key: statKey, Value: 1, Period: 0},
+		StatToProve:   txline.ScoreStatResponse{Key: statKey, Value: 1, Period: 0},
 	}, nil
+}
+
+type snapshotTxline struct {
+	fakeTxline
+	rows []txline.ScoreSnapshotRow
+}
+
+func (s *snapshotTxline) FetchScoreSnapshot(ctx context.Context, fixtureID int64) ([]txline.ScoreSnapshotRow, error) {
+	return s.rows, nil
 }
 
 type fakeSolana struct {
@@ -164,14 +179,15 @@ func (f *fakeSolana) ListMatchedWagers(ctx context.Context, matchID string) ([]s
 	copy(matchBytes[:], []byte(matchID))
 	if f.storedWager.Pubkey.IsZero() {
 		f.storedWager = solanapkg.Wager{
-			Pubkey:     solana.NewWallet().PublicKey(),
-			Maker:      solana.NewWallet().PublicKey(),
-			Taker:      solana.NewWallet().PublicKey(),
-			MatchID:    matchBytes,
-			MatchIDLen: uint8(len(matchID)),
-			MakerSide:  solanapkg.SideHome,
-			TakerSide:  solanapkg.SideAway,
-			Status:     solanapkg.WagerStatusMatched,
+			Pubkey:             solana.NewWallet().PublicKey(),
+			Maker:              solana.NewWallet().PublicKey(),
+			Taker:              solana.NewWallet().PublicKey(),
+			MatchID:            matchBytes,
+			MatchIDLen:         uint8(len(matchID)),
+			Participant1IsHome: true,
+			MakerSide:          solanapkg.SideHome,
+			TakerSide:          solanapkg.SideAway,
+			Status:             solanapkg.WagerStatusMatched,
 		}
 	}
 	return []solanapkg.Wager{f.storedWager}, nil
@@ -408,6 +424,100 @@ func TestHandleUpdateFinalTriggersSettlement(t *testing.T) {
 	}
 }
 
+func TestReconcileRefreshesInferredFinalWithoutAutoSettle(t *testing.T) {
+	c := newMemCache()
+	home, away := int32(0), int32(0)
+	c.matches["17952170"] = cache.Match{
+		MatchID:     "17952170",
+		FixtureID:   17952170,
+		GameState:   "FT",
+		IsFinal:     true,
+		FinalSource: cache.FinalSourceInferred,
+		HomeGoals:   &home,
+		AwayGoals:   &away,
+		Seq:         1,
+	}
+	tx := &snapshotTxline{rows: []txline.ScoreSnapshotRow{{
+		FixtureID:          17952170,
+		GameState:          "F2",
+		Seq:                42,
+		Participant1IsHome: true,
+		ScoreSoccer: &txline.SoccerFixtureScore{
+			Participant1: txline.SoccerTotalScore{Goals: 2},
+			Participant2: txline.SoccerTotalScore{Goals: 0},
+		},
+	}}}
+	sc := &fakeSolana{}
+	w := &Worker{Cache: c, Txline: tx, Solana: sc, AutoSettle: false}
+
+	if err := w.ReconcileFinalMatches(context.Background()); err != nil {
+		t.Fatalf("ReconcileFinalMatches: %v", err)
+	}
+	got, err := c.GetMatch(context.Background(), "17952170")
+	if err != nil {
+		t.Fatalf("GetMatch: %v", err)
+	}
+	if got.FinalSource != cache.FinalSourceTxline || got.Seq != 42 {
+		t.Fatalf("refreshed match = %#v", got)
+	}
+	if got.HomeGoals == nil || *got.HomeGoals != 2 {
+		t.Fatalf("home goals = %#v", got.HomeGoals)
+	}
+	if sc.settleCalls != 0 {
+		t.Fatalf("settle calls = %d, want 0", sc.settleCalls)
+	}
+}
+
+func TestProcessPendingItemUsesHydratedFinalSeq(t *testing.T) {
+	c := newMemCache()
+	matchID := "17952170"
+	wagerPubkey := solana.NewWallet().PublicKey()
+	maker := solana.NewWallet().PublicKey()
+	taker := solana.NewWallet().PublicKey()
+	var matchBytes [32]byte
+	copy(matchBytes[:], []byte(matchID))
+	sc := &fakeSolana{storedWager: solanapkg.Wager{
+		Pubkey:             wagerPubkey,
+		Maker:              maker,
+		Taker:              taker,
+		MatchID:            matchBytes,
+		MatchIDLen:         uint8(len(matchID)),
+		Participant1IsHome: true,
+		MakerSide:          solanapkg.SideHome,
+		TakerSide:          solanapkg.SideAway,
+		Status:             solanapkg.WagerStatusMatched,
+	}}
+	tx := &snapshotTxline{rows: []txline.ScoreSnapshotRow{{
+		FixtureID:          17952170,
+		GameState:          "F2",
+		Seq:                42,
+		Participant1IsHome: true,
+		ScoreSoccer: &txline.SoccerFixtureScore{
+			Participant1: txline.SoccerTotalScore{Goals: 2},
+			Participant2: txline.SoccerTotalScore{Goals: 0},
+		},
+	}}}
+	w := &Worker{Cache: c, Txline: tx, Solana: sc, KeeperKey: solana.NewWallet().PrivateKey}
+
+	err := w.processPendingItem(context.Background(), cache.PendingSettlement{
+		MatchID:     matchID,
+		WagerPubkey: wagerPubkey.String(),
+		FixtureID:   17952170,
+		Seq:         1,
+		GameState:   "FT",
+		Attempts:    1,
+	})
+	if err != nil {
+		t.Fatalf("processPendingItem: %v", err)
+	}
+	if tx.lastSeq != 42 {
+		t.Fatalf("proof seq = %d, want hydrated final seq 42", tx.lastSeq)
+	}
+	if sc.settleCalls != 1 {
+		t.Fatalf("settle calls = %d, want 1", sc.settleCalls)
+	}
+}
+
 func TestRunRespectsContextCancel(t *testing.T) {
 	w := &Worker{Cache: newMemCache(), StatKey: 1002}
 	events := make(chan txline.ScoreUpdate)
@@ -466,16 +576,21 @@ func TestSettleMatchErrorBranches(t *testing.T) {
 		t.Fatal("expected list error")
 	}
 
+	c3 := newMemCache()
+	sc3 := &fakeSolana{}
 	w3 := &Worker{
-		Cache:      newMemCache(),
+		Cache:      c3,
 		Txline:     &fakeTxline{err: errors.New("proof")},
-		Solana:     &fakeSolana{},
+		Solana:     sc3,
 		KeeperKey:  solana.NewWallet().PrivateKey,
 		StatKey:    1002,
 		AutoSettle: true,
 	}
-	if err := w3.SettleMatch(ctx, update); err == nil {
-		t.Fatal("expected proof error")
+	if err := w3.SettleMatch(ctx, update); err != nil {
+		t.Fatalf("proof error should queue per wager: %v", err)
+	}
+	if _, err := c3.GetPendingSettlement(ctx, update.MatchID(), sc3.storedWager.Pubkey.String()); err != nil {
+		t.Fatalf("expected proof failure to be queued: %v", err)
 	}
 
 	empty := &Worker{Cache: newMemCache(), Txline: &fakeTxline{}, Solana: &fakeSolana{}, KeeperKey: solana.NewWallet().PrivateKey, StatKey: 1002, AutoSettle: true}

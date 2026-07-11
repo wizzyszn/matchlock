@@ -80,6 +80,9 @@ func (w *OddsWorker) syncOnce(ctx context.Context) error {
 		if err := w.Cache.UpsertMatch(ctx, match); err != nil {
 			return err
 		}
+		if err := w.Cache.PublishMatchUpdate(ctx, match); err != nil {
+			slog.Debug("publish odds update failed", "match_id", match.MatchID, "err", err)
+		}
 		refreshed++
 	}
 
