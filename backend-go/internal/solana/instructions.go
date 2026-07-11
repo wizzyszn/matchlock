@@ -13,20 +13,25 @@ import (
 )
 
 var (
-	makeWagerDiscriminator        = [8]byte{14, 41, 8, 64, 67, 76, 114, 149}
-	acceptWagerDiscriminator      = [8]byte{214, 18, 178, 214, 203, 22, 50, 119}
-	cancelWagerDiscriminator      = [8]byte{57, 92, 124, 123, 216, 16, 37, 148}
-	faucetDiscriminator           = [8]byte{49, 178, 104, 8, 23, 120, 186, 21}
-	registerWalletDiscriminator   = [8]byte{181, 141, 102, 82, 135, 213, 141, 8}
+	makeWagerDiscriminator      = [8]byte{14, 41, 8, 64, 67, 76, 114, 149}
+	acceptWagerDiscriminator    = [8]byte{214, 18, 178, 214, 203, 22, 50, 119}
+	cancelWagerDiscriminator    = [8]byte{57, 92, 124, 123, 216, 16, 37, 148}
+	faucetDiscriminator         = [8]byte{49, 178, 104, 8, 23, 120, 186, 21}
+	registerWalletDiscriminator = [8]byte{181, 141, 102, 82, 135, 213, 141, 8}
 )
 
-func FindWagerPDA(programID, maker solana.PublicKey, matchID []byte) (solana.PublicKey, uint8, error) {
-	return solana.FindProgramAddress([][]byte{[]byte(WagerSeed), maker.Bytes(), matchID}, programID)
+func FindWagerPDA(programID, maker solana.PublicKey, matchID []byte, nonce uint64) (solana.PublicKey, uint8, error) {
+	nonceLE := make([]byte, 8)
+	binary.LittleEndian.PutUint64(nonceLE, nonce)
+	return solana.FindProgramAddress([][]byte{[]byte(WagerSeed), maker.Bytes(), matchID, nonceLE}, programID)
 }
 
-func EncodeMakeWagerData(matchID []byte, stake uint64, makerSide uint8, invitedTaker solana.PublicKey) ([]byte, error) {
+func EncodeMakeWagerData(matchID []byte, stake uint64, makerSide uint8, invitedTaker solana.PublicKey, participant1IsHome bool, nonce uint64) ([]byte, error) {
 	if len(matchID) == 0 || len(matchID) > 32 {
 		return nil, fmt.Errorf("match_id length %d out of range", len(matchID))
+	}
+	if _, err := strconv.ParseInt(string(matchID), 10, 64); err != nil {
+		return nil, fmt.Errorf("match_id must be a numeric fixture id")
 	}
 	var buf []byte
 	buf = append(buf, makeWagerDiscriminator[:]...)
@@ -39,6 +44,14 @@ func EncodeMakeWagerData(matchID []byte, stake uint64, makerSide uint8, invitedT
 	buf = append(buf, stakeLE[:]...)
 	buf = append(buf, makerSide)
 	buf = append(buf, invitedTaker.Bytes()...)
+	if participant1IsHome {
+		buf = append(buf, 1)
+	} else {
+		buf = append(buf, 0)
+	}
+	var nonceLE [8]byte
+	binary.LittleEndian.PutUint64(nonceLE[:], nonce)
+	buf = append(buf, nonceLE[:]...)
 	return buf, nil
 }
 
@@ -54,11 +67,13 @@ func EncodeCancelWagerData() []byte {
 }
 
 type MakeWagerParams struct {
-	Maker         solana.PrivateKey
-	MatchID       string
-	Stake         uint64
-	MakerSide     uint8
-	InvitedTaker  solana.PublicKey
+	Maker              solana.PrivateKey
+	MatchID            string
+	Stake              uint64
+	MakerSide          uint8
+	InvitedTaker       solana.PublicKey
+	Participant1IsHome bool
+	Nonce              uint64
 }
 
 func (c *Client) MakeWager(ctx context.Context, p MakeWagerParams) (solana.PublicKey, solana.Signature, error) {
@@ -67,7 +82,7 @@ func (c *Client) MakeWager(ctx context.Context, p MakeWagerParams) (solana.Publi
 	if err != nil {
 		return solana.PublicKey{}, solana.Signature{}, err
 	}
-	wagerPDA, _, err := FindWagerPDA(c.programID, p.Maker.PublicKey(), matchBytes)
+	wagerPDA, _, err := FindWagerPDA(c.programID, p.Maker.PublicKey(), matchBytes, p.Nonce)
 	if err != nil {
 		return solana.PublicKey{}, solana.Signature{}, err
 	}
@@ -80,7 +95,7 @@ func (c *Client) MakeWager(ctx context.Context, p MakeWagerParams) (solana.Publi
 		return solana.PublicKey{}, solana.Signature{}, err
 	}
 
-	ixData, err := EncodeMakeWagerData(matchBytes, p.Stake, p.MakerSide, p.InvitedTaker)
+	ixData, err := EncodeMakeWagerData(matchBytes, p.Stake, p.MakerSide, p.InvitedTaker, p.Participant1IsHome, p.Nonce)
 	if err != nil {
 		return solana.PublicKey{}, solana.Signature{}, err
 	}
@@ -198,7 +213,7 @@ func (c *Client) RegisterWallet(ctx context.Context, keeperKey solana.PrivateKey
 		solana.Meta(keeperKey.PublicKey()).SIGNER().WRITE(), // authority
 		solana.Meta(configPDA),                              // config
 		solana.Meta(walletProfilePDA).WRITE(),               // wallet_profile (init)
-		solana.Meta(solana.SystemProgramID),                  // system_program
+		solana.Meta(solana.SystemProgramID),                 // system_program
 	}
 	ix := solana.NewInstruction(c.programID, accounts, ixData)
 	_, _, err = c.sendSigned(ctx, keeperKey, []solana.Instruction{ix})

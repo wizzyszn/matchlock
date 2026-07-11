@@ -106,66 +106,45 @@ func (c *Client) GetWager(ctx context.Context, pubkey solana.PublicKey) (Wager, 
 
 // ListWagers returns wagers indexed from chain with optional filters.
 func (c *Client) ListWagers(ctx context.Context, filter WagerFilter) ([]Wager, error) {
-	// Query V1 wagers
-	filtersV1 := []rpc.RPCFilter{
-		{DataSize: wagerAccountSizeV1},
-		{Memcmp: &rpc.RPCFilterMemcmp{Offset: 0, Bytes: wagerDiscriminator[:]}},
-	}
-	if filter.Status != nil {
-		filtersV1 = append(filtersV1, rpc.RPCFilter{
-			Memcmp: &rpc.RPCFilterMemcmp{Offset: statusOffsetV1, Bytes: []byte{*filter.Status}},
-		})
-	}
-	if filter.MatchID != "" {
-		filtersV1 = append(filtersV1, rpc.RPCFilter{
-			Memcmp: &rpc.RPCFilterMemcmp{Offset: matchIDOffsetV1, Bytes: MatchIDFilterBytes(filter.MatchID)},
-		})
+	layouts := []struct {
+		name       string
+		size       uint64
+		statusOff  uint64
+		matchIDOff uint64
+	}{
+		{name: "v1", size: wagerAccountSizeV1, statusOff: statusOffsetV1, matchIDOff: matchIDOffsetV1},
+		{name: "v2", size: wagerAccountSizeV2, statusOff: statusOffsetV2, matchIDOff: matchIDOffsetV2},
+		{name: "v3", size: wagerAccountSizeV3, statusOff: statusOffsetV3, matchIDOff: matchIDOffsetV3},
+		{name: "v4", size: wagerAccountSizeV4, statusOff: statusOffsetV4, matchIDOff: matchIDOffsetV4},
 	}
 
-	// Query V2 wagers
-	filtersV2 := []rpc.RPCFilter{
-		{DataSize: wagerAccountSizeV2},
-		{Memcmp: &rpc.RPCFilterMemcmp{Offset: 0, Bytes: wagerDiscriminator[:]}},
-	}
-	if filter.Status != nil {
-		filtersV2 = append(filtersV2, rpc.RPCFilter{
-			Memcmp: &rpc.RPCFilterMemcmp{Offset: statusOffsetV2, Bytes: []byte{*filter.Status}},
-		})
-	}
-	if filter.MatchID != "" {
-		filtersV2 = append(filtersV2, rpc.RPCFilter{
-			Memcmp: &rpc.RPCFilterMemcmp{Offset: matchIDOffsetV2, Bytes: MatchIDFilterBytes(filter.MatchID)},
-		})
-	}
-
-	var accounts []*rpc.KeyedAccount
-	var accountsV1, accountsV2 []*rpc.KeyedAccount
-	var err1, err2 error
+	accountsByLayout := make([][]*rpc.KeyedAccount, len(layouts))
+	errs := make([]error, len(layouts))
 	var wg sync.WaitGroup
-
-	wg.Add(2)
-	go func() {
-		defer wg.Done()
-		accountsV1, err1 = c.rpc.GetProgramAccountsWithOpts(ctx, c.programID, &rpc.GetProgramAccountsOpts{
-			Filters: filtersV1,
-		})
-	}()
-	go func() {
-		defer wg.Done()
-		accountsV2, err2 = c.rpc.GetProgramAccountsWithOpts(ctx, c.programID, &rpc.GetProgramAccountsOpts{
-			Filters: filtersV2,
-		})
-	}()
+	for i, layout := range layouts {
+		wg.Add(1)
+		go func(i int, layout struct {
+			name       string
+			size       uint64
+			statusOff  uint64
+			matchIDOff uint64
+		}) {
+			defer wg.Done()
+			filters := wagerAccountFilters(layout.size, layout.statusOff, layout.matchIDOff, filter)
+			accountsByLayout[i], errs[i] = c.rpc.GetProgramAccountsWithOpts(ctx, c.programID, &rpc.GetProgramAccountsOpts{
+				Filters: filters,
+			})
+		}(i, layout)
+	}
 	wg.Wait()
 
-	if err1 != nil {
-		return nil, fmt.Errorf("get v1 program accounts: %w", err1)
+	var accounts []*rpc.KeyedAccount
+	for i, err := range errs {
+		if err != nil {
+			return nil, fmt.Errorf("get %s program accounts: %w", layouts[i].name, err)
+		}
+		accounts = append(accounts, accountsByLayout[i]...)
 	}
-	if err2 != nil {
-		return nil, fmt.Errorf("get v2 program accounts: %w", err2)
-	}
-	accounts = append(accounts, accountsV1...)
-	accounts = append(accounts, accountsV2...)
 	out := make([]Wager, 0, len(accounts))
 	for _, acct := range accounts {
 		w, err := DecodeWager(acct.Pubkey, acct.Account.Data.GetBinary())
@@ -190,6 +169,24 @@ func (c *Client) ListWagers(ctx context.Context, filter WagerFilter) ([]Wager, e
 		out = append(out, w)
 	}
 	return out, nil
+}
+
+func wagerAccountFilters(size, statusOffset, matchIDOffset uint64, filter WagerFilter) []rpc.RPCFilter {
+	filters := []rpc.RPCFilter{
+		{DataSize: size},
+		{Memcmp: &rpc.RPCFilterMemcmp{Offset: 0, Bytes: wagerDiscriminator[:]}},
+	}
+	if filter.Status != nil {
+		filters = append(filters, rpc.RPCFilter{
+			Memcmp: &rpc.RPCFilterMemcmp{Offset: statusOffset, Bytes: []byte{*filter.Status}},
+		})
+	}
+	if filter.MatchID != "" {
+		filters = append(filters, rpc.RPCFilter{
+			Memcmp: &rpc.RPCFilterMemcmp{Offset: matchIDOffset, Bytes: MatchIDFilterBytes(filter.MatchID)},
+		})
+	}
+	return filters
 }
 
 // ListMatchedWagers returns matched wagers for a given match_id string.

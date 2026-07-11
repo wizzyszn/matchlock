@@ -13,7 +13,7 @@ import (
 )
 
 const (
-	testProgramID = "VgsUt4Fjn6jqrqP7EuqvWJM3NqYufA2haNrP9fGGaYv"
+	testProgramID = "6a1hkAgtuewKaB6B4vt1bMymcFVtK85mGVbVBJkURaZ8"
 	testMint      = "ELWTKspHKCnCfCiCiqYw1EDH77k8VCP74dK9qytG2Ujh"
 	testTxlineID  = "6pW64gN1s2uqjHkn1unFeEjAwJkPGHoppGvS715wyP2J"
 )
@@ -123,7 +123,7 @@ func TestListWagers(t *testing.T) {
 	calls := 0
 	mock.getProgramAccounts = func() json.RawMessage {
 		calls++
-		if calls%2 == 0 {
+		if (calls-1)%3 != 0 {
 			return []byte(`[]`)
 		}
 		payload, _ := json.Marshal([]map[string]any{{
