@@ -1,6 +1,6 @@
 import type { AppConfig } from '@/lib/config'
 
-export type Side = 'home' | 'draw' | 'away'
+export type Side = 'home' | 'draw' | 'away' | 'unset'
 
 export type WagerStatus = 'open' | 'matched' | 'settled' | 'cancelled'
 

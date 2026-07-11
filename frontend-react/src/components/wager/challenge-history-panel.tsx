@@ -450,6 +450,8 @@ export function ChallengeHistoryPanel() {
                             return lbl.awayTeam
                           case 'draw':
                             return 'Draw'
+                          case 'unset':
+                            return '—'
                         }
                       })()
                     : entry.backed_side

@@ -12,6 +12,8 @@ export function sideLabel(side: Side, match: Match): string {
       return labels.awayTeam
     case 'draw':
       return 'Draw'
+    case 'unset':
+      return '—'
   }
 }
 
@@ -23,6 +25,8 @@ export function sideShortLabel(side: Side): string {
       return 'X'
     case 'away':
       return '2'
+    case 'unset':
+      return '—'
   }
 }
 
@@ -47,5 +51,7 @@ export function referenceOddsForSide(
       return odds.draw ?? null
     case 'away':
       return odds.away ?? null
+    case 'unset':
+      return null
   }
 }

@@ -25,9 +25,10 @@ const (
 	WagerStatusSettled   uint8 = 2
 	WagerStatusCancelled uint8 = 3
 
-	SideHome uint8 = 0
-	SideAway uint8 = 1
-	SideDraw uint8 = 2
+	SideHome  uint8 = 0
+	SideAway  uint8 = 1
+	SideDraw  uint8 = 2
+	SideUnset uint8 = 3
 
 	wagerAccountSizeV1 = 118
 	wagerAccountSizeV2 = 150
@@ -204,13 +205,15 @@ func StatusName(status uint8) string {
 	}
 }
 
-// SideName returns home/draw/away for API consumers.
+// SideName returns home/away/draw/unset for API consumers.
 func SideName(side uint8) string {
 	switch side {
 	case SideAway:
 		return "away"
 	case SideDraw:
 		return "draw"
+	case SideUnset:
+		return "unset"
 	default:
 		return "home"
 	}
