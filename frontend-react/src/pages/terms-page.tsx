@@ -1,7 +1,7 @@
 import { Link } from 'react-router-dom'
 import { ArrowLeft } from 'lucide-react'
 
-import { buttonVariants } from '@/components/ui/button'
+import { Button } from '@/components/ui/button'
 
 export function TermsPage() {
   return (
