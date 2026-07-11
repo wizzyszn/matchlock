@@ -35,6 +35,8 @@ function toAnchorSide(side: Side) {
       return { away: {} }
     case 'draw':
       return { draw: {} }
+    case 'unset':
+      throw new Error('Cannot use unset side as an instruction argument')
   }
 }
 

@@ -1098,6 +1098,74 @@
           "type": "pubkey"
         }
       ]
+    },
+    {
+      "name": "update_config",
+      "discriminator": [
+        29,
+        158,
+        252,
+        191,
+        10,
+        83,
+        219,
+        99
+      ],
+      "accounts": [
+        {
+          "name": "authority",
+          "writable": true,
+          "signer": true,
+          "relations": [
+            "config"
+          ]
+        },
+        {
+          "name": "config",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  99,
+                  111,
+                  110,
+                  102,
+                  105,
+                  103
+                ]
+              }
+            ]
+          }
+        }
+      ],
+      "args": [
+        {
+          "name": "new_authority",
+          "type": {
+            "option": "pubkey"
+          }
+        },
+        {
+          "name": "new_stablecoin_mint",
+          "type": {
+            "option": "pubkey"
+          }
+        },
+        {
+          "name": "new_txline_program",
+          "type": {
+            "option": "pubkey"
+          }
+        },
+        {
+          "name": "paused",
+          "type": {
+            "option": "bool"
+          }
+        }
+      ]
     }
   ],
   "accounts": [
@@ -1231,6 +1299,11 @@
       "code": 6017,
       "name": "InvalidWallet",
       "msg": "Invalid wallet pubkey"
+    },
+    {
+      "code": 6018,
+      "name": "ContractPaused",
+      "msg": "Contract is paused — this action is currently disabled"
     }
   ],
   "types": [
@@ -1285,6 +1358,15 @@
           {
             "name": "bump",
             "type": "u8"
+          },
+          {
+            "name": "paused",
+            "docs": [
+              "When true, make_wager, accept_wager, and register_wallet are disabled.",
+              "cancel_wager, settle_wager, and unregister_wallet remain available so",
+              "funds are never trapped."
+            ],
+            "type": "bool"
           }
         ]
       }
@@ -1392,6 +1474,9 @@
           },
           {
             "name": "Draw"
+          },
+          {
+            "name": "Unset"
           }
         ]
       }
