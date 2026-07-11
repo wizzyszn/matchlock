@@ -45,6 +45,7 @@ func migrate(gdb *gorm.DB) error {
 		&WalletLinkChallenge{},
 		&WagerInvite{},
 		&LeaderboardEntry{},
+		&LeaderboardSettlement{},
 	); err != nil {
 		return fmt.Errorf("auto migrate: %w", err)
 	}

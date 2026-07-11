@@ -13,7 +13,7 @@ info:
     browser wallet via the Solana program — this API is read-only for on-chain state.
 
     **Devnet defaults** (see `backend-go/.env`):
-    - Program: `VgsUt4Fjn6jqrqP7EuqvWJM3NqYufA2haNrP9fGGaYv`
+    - Program: `6a1hkAgtuewKaB6B4vt1bMymcFVtK85mGVbVBJkURaZ8`
     - Stablecoin mint: `ELWTKspHKCnCfCiCiqYw1EDH77k8VCP74dK9qytG2Ujh`
     - Cluster: `devnet`
 
@@ -34,6 +34,8 @@ tags:
     description: Wager settlement status and proof
   - name: auth
     description: Email magic-link authentication and wallet binding
+  - name: leaderboard
+    description: Ranked player standings derived from settled wagers
   - name: challenges
     description: Peer-to-peer challenge invites
 
@@ -167,6 +169,36 @@ paths:
                   $ref: "#/components/schemas/WagerView"
         "400":
           $ref: "#/components/responses/InvalidQuery"
+        "502":
+          $ref: "#/components/responses/RpcError"
+
+  /wagers/history:
+    get:
+      tags: [wagers]
+      operationId: listWagerHistory
+      summary: List wallet bet history
+      description: |
+        Returns wallet-specific wager history with backend-owned settlement, outcome,
+        and date filtering. Match metadata is embedded for the history UI.
+      parameters:
+        - $ref: "#/components/parameters/HistoryWalletQuery"
+        - $ref: "#/components/parameters/HistorySettlementStatusQuery"
+        - $ref: "#/components/parameters/HistoryOutcomeQuery"
+        - $ref: "#/components/parameters/HistoryFromQuery"
+        - $ref: "#/components/parameters/HistoryToQuery"
+        - $ref: "#/components/parameters/OffsetQuery"
+        - $ref: "#/components/parameters/LimitQuery"
+      responses:
+        "200":
+          description: Wager history page
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/WagerHistoryPageView"
+        "400":
+          $ref: "#/components/responses/InvalidQuery"
+        "500":
+          $ref: "#/components/responses/CacheError"
         "502":
           $ref: "#/components/responses/RpcError"
 
@@ -624,6 +656,100 @@ paths:
         "401":
           $ref: "#/components/responses/Unauthorized"
 
+  /leaderboard:
+    get:
+      tags: [leaderboard]
+      operationId: getLeaderboard
+      summary: List ranked leaderboard entries
+      description: |
+        Returns leaderboard rows ordered by net PnL descending, then wins, total volume,
+        and user id for deterministic ranking.
+      parameters:
+        - $ref: "#/components/parameters/OffsetQuery"
+        - $ref: "#/components/parameters/LeaderboardLimitQuery"
+      responses:
+        "200":
+          description: Leaderboard page
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/LeaderboardPage"
+        "500":
+          $ref: "#/components/responses/InternalError"
+
+  /leaderboard/me:
+    get:
+      tags: [leaderboard]
+      operationId: getMyLeaderboardRank
+      summary: Get the authenticated user's leaderboard row and rank
+      responses:
+        "200":
+          description: Leaderboard entry or empty rank if the user has no settled wagers yet
+          content:
+            application/json:
+              schema:
+                oneOf:
+                  - $ref: "#/components/schemas/LeaderboardEntry"
+                  - type: object
+                    required: [rank, total_wagers]
+                    properties:
+                      rank:
+                        type: "null"
+                      total_wagers:
+                        type: integer
+                        example: 0
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "500":
+          $ref: "#/components/responses/InternalError"
+
+  /leaderboard/stats:
+    get:
+      tags: [leaderboard]
+      operationId: getLeaderboardStats
+      summary: Get leaderboard aggregates
+      description: Returns aggregates across all leaderboard rows, not just the first page.
+      responses:
+        "200":
+          description: Leaderboard aggregates
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/LeaderboardStats"
+        "500":
+          $ref: "#/components/responses/InternalError"
+
+  /leaderboard/wagers/{pubkey}/sync:
+    post:
+      tags: [leaderboard]
+      operationId: syncLeaderboardSettlement
+      summary: Sync a settled wager into the leaderboard
+      description: |
+        Reconciles a settled on-chain wager into leaderboard standings. Safe to call multiple
+        times; each wager is counted at most once.
+      parameters:
+        - $ref: "#/components/parameters/WagerPubkey"
+        - $ref: "#/components/parameters/TxSignatureQuery"
+      responses:
+        "200":
+          description: Wager has been processed for leaderboard purposes
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/LeaderboardSyncResponse"
+        "400":
+          $ref: "#/components/responses/InvalidPubkey"
+        "404":
+          $ref: "#/components/responses/WagerNotFound"
+        "409":
+          description: Wager is not settled or final score is unavailable
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "500":
+          $ref: "#/components/responses/InternalError"
+
   /challenges/invites:
     post:
       tags: [challenges]
@@ -848,6 +974,70 @@ components:
       schema:
         type: string
         example: "2qtn5WqZhXxEpgVqJy1u2m9RjXDkWsP2NdGq9BmPQGRP"
+    HistoryWalletQuery:
+      name: wallet
+      in: query
+      required: true
+      description: Wallet pubkey whose bet history should be returned
+      schema:
+        type: string
+        example: "2qtn5WqZhXxEpgVqJy1u2m9RjXDkWsP2NdGq9BmPQGRP"
+    HistorySettlementStatusQuery:
+      name: settlement_status
+      in: query
+      required: false
+      description: Filter by settlement state group
+      schema:
+        $ref: "#/components/schemas/WagerHistorySettlementStatus"
+    HistoryOutcomeQuery:
+      name: outcome
+      in: query
+      required: false
+      description: Filter by resolved outcome
+      schema:
+        $ref: "#/components/schemas/WagerHistoryOutcome"
+    HistoryFromQuery:
+      name: from
+      in: query
+      required: false
+      description: Inclusive lower bound for match start time in Unix milliseconds
+      schema:
+        type: integer
+        format: int64
+    HistoryToQuery:
+      name: to
+      in: query
+      required: false
+      description: Inclusive upper bound for match start time in Unix milliseconds
+      schema:
+        type: integer
+        format: int64
+    OffsetQuery:
+      name: offset
+      in: query
+      required: false
+      description: Zero-based row offset
+      schema:
+        type: integer
+        minimum: 0
+    LimitQuery:
+      name: limit
+      in: query
+      required: false
+      description: Page size (default 25, max 100)
+      schema:
+        type: integer
+        minimum: 1
+        maximum: 100
+    LeaderboardLimitQuery:
+      name: limit
+      in: query
+      required: false
+      description: Page size for leaderboard results (default 20, max 100)
+      schema:
+        type: integer
+        minimum: 1
+        maximum: 100
     PubkeyQuery:
       name: pubkey
       in: query
@@ -873,6 +1063,14 @@ components:
       schema:
         type: string
         example: "mlink_abc123def456"
+    TxSignatureQuery:
+      name: tx_signature
+      in: query
+      required: false
+      description: Settlement transaction signature associated with the sync request
+      schema:
+        type: string
+        example: "5K8QhYQfQm3d4h8zvVxS9d4QxU9W7xjB7vZk8Lr3zM5iQkzP9"
 
   schemas:
     # ── Health ──
@@ -995,6 +1193,9 @@ components:
         participant2_id:
           type: integer
           format: int32
+        participant1_is_home:
+          type: boolean
+          description: Whether TxLINE participant 1 maps to the home team.
         home_team:
           type: string
         away_team:
@@ -1069,6 +1270,143 @@ components:
     WagerStatus:
       type: string
       enum: [open, matched, settled, cancelled]
+
+    WagerHistorySettlementStatus:
+      type: string
+      enum: [settled, unsettled]
+
+    WagerHistoryOutcome:
+      type: string
+      enum: [won, lost, void]
+
+    WagerHistoryEntryView:
+      type: object
+      required:
+        - wager
+        - settlement_status
+        - backed_side
+        - is_maker
+      properties:
+        wager:
+          $ref: "#/components/schemas/WagerView"
+        match:
+          $ref: "#/components/schemas/MatchView"
+        settlement_status:
+          $ref: "#/components/schemas/WagerHistorySettlementStatus"
+        outcome:
+          $ref: "#/components/schemas/WagerHistoryOutcome"
+        backed_side:
+          $ref: "#/components/schemas/Side"
+        opponent:
+          type: string
+          description: Counterparty wallet pubkey when available
+        is_maker:
+          type: boolean
+        event_time:
+          type: integer
+          format: int64
+          description: Match start time in Unix milliseconds
+
+    WagerHistoryPageView:
+      type: object
+      required:
+        - entries
+        - total
+        - offset
+        - limit
+        - has_more
+      properties:
+        entries:
+          type: array
+          items:
+            $ref: "#/components/schemas/WagerHistoryEntryView"
+        total:
+          type: integer
+        offset:
+          type: integer
+        limit:
+          type: integer
+        has_more:
+          type: boolean
+
+    # ── Leaderboard ──
+    LeaderboardEntry:
+      type: object
+      required:
+        - rank
+        - user_id
+        - email
+        - total_wagers
+        - wins
+        - losses
+        - win_rate
+        - total_volume
+        - net_pnl
+      properties:
+        rank:
+          type: integer
+        user_id:
+          type: string
+          format: uuid
+        email:
+          type: string
+          format: email
+        display_name:
+          type: string
+        total_wagers:
+          type: integer
+        wins:
+          type: integer
+        losses:
+          type: integer
+        win_rate:
+          type: number
+          format: double
+        total_volume:
+          type: integer
+          format: int64
+        net_pnl:
+          type: integer
+          format: int64
+
+    LeaderboardPage:
+      type: object
+      required: [entries, total, offset, limit, has_more]
+      properties:
+        entries:
+          type: array
+          items:
+            $ref: "#/components/schemas/LeaderboardEntry"
+        total:
+          type: integer
+        offset:
+          type: integer
+        limit:
+          type: integer
+        has_more:
+          type: boolean
+
+    LeaderboardStats:
+      type: object
+      required: [total_users, total_wagers, total_volume, avg_win_rate]
+      properties:
+        total_users:
+          type: integer
+        total_wagers:
+          type: integer
+        total_volume:
+          type: integer
+          format: int64
+        avg_win_rate:
+          type: number
+          format: double
+
+    LeaderboardSyncResponse:
+      type: object
+      required: [synced]
+      properties:
+        synced:
+          type: boolean
 
     # ── Settlement ──
     SettlementStatusView:
@@ -1503,3 +1841,12 @@ components:
           example:
             error: could not create invite
             code: INVITE_ERROR
+    InternalError:
+      description: Internal server error
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
+          example:
+            error: request failed
+            code: INTERNAL_ERROR

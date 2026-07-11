@@ -222,6 +222,9 @@ func (h *handler) getWagerSettlement(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	if wager.Status == chainsol.WagerStatusMatched {
+		h.refreshVerifiedFinalForWager(r.Context(), wager)
+	}
 	view := resolveWagerSettlement(r.Context(), h.cache, wager)
 	writeJSON(w, http.StatusOK, settlementViewFromCache(view))
 }

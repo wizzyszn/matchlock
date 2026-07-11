@@ -70,6 +70,7 @@ func newMux(h *handler) *http.ServeMux {
 	mux.HandleFunc("GET /matches/stream", h.matchStream)
 	mux.HandleFunc("GET /matches/{id}", h.getMatch)
 	mux.HandleFunc("GET /wagers", h.listWagers)
+	mux.HandleFunc("GET /wagers/history", h.listWagerHistory)
 	mux.HandleFunc("GET /wagers/{pubkey}", h.getWager)
 	mux.HandleFunc("GET /wagers/{pubkey}/settlement", h.getWagerSettlement)
 	mux.HandleFunc("GET /wagers/{pubkey}/settlement-proof", h.getWagerSettlementProof)
@@ -90,6 +91,7 @@ func newMux(h *handler) *http.ServeMux {
 	mux.HandleFunc("GET /leaderboard", h.getLeaderboard)
 	mux.HandleFunc("GET /leaderboard/me", auth.RequireAuth(h.getMyLeaderboardRank))
 	mux.HandleFunc("GET /leaderboard/stats", h.getLeaderboardStats)
+	mux.HandleFunc("POST /leaderboard/wagers/{pubkey}/sync", h.syncLeaderboardSettlement)
 
 	mux.HandleFunc("POST /challenges/invites", auth.RequireAuth(h.postChallengeInvite))
 	mux.HandleFunc("GET /challenges/invites", auth.RequireAuth(h.listChallengeInvites))

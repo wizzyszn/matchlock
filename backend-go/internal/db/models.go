@@ -144,6 +144,18 @@ type LeaderboardEntry struct {
 	UpdatedAt   time.Time
 }
 
+type LeaderboardSettlement struct {
+	WagerPubkey  string    `gorm:"primaryKey;size:64"`
+	MatchID      string    `gorm:"size:64;index;not null"`
+	WinnerPubkey string    `gorm:"size:64;not null"`
+	LoserPubkey  string    `gorm:"size:64;not null"`
+	Stake        uint64    `gorm:"not null"`
+	SettledAt    time.Time `gorm:"not null"`
+	SyncedAt     time.Time `gorm:"not null"`
+	TxSignature  string    `gorm:"size:128"`
+	WinningSide  uint8     `gorm:"not null"`
+}
+
 func (l *LeaderboardEntry) BeforeCreate(tx *gorm.DB) error {
 	return nil
 }
