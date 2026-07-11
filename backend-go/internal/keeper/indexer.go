@@ -80,13 +80,21 @@ func (idx *WagerIndexer) backfill(ctx context.Context) error {
 		{DataSize: 150},
 		{Memcmp: &rpc.RPCFilterMemcmp{Offset: 0, Bytes: disc[:]}},
 	}
+	v3Filters := []rpc.RPCFilter{
+		{DataSize: 151},
+		{Memcmp: &rpc.RPCFilterMemcmp{Offset: 0, Bytes: disc[:]}},
+	}
+	v4Filters := []rpc.RPCFilter{
+		{DataSize: 159},
+		{Memcmp: &rpc.RPCFilterMemcmp{Offset: 0, Bytes: disc[:]}},
+	}
 
 	var accounts []*rpc.KeyedAccount
 	var mu sync.Mutex
 	var wg sync.WaitGroup
-	var err1, err2 error
+	var err1, err2, err3, err4 error
 
-	wg.Add(2)
+	wg.Add(4)
 	go func() {
 		defer wg.Done()
 		v1, err := idx.rpcClient.GetProgramAccountsWithOpts(ctx, idx.programID, &rpc.GetProgramAccountsOpts{Filters: v1Filters})
@@ -109,6 +117,28 @@ func (idx *WagerIndexer) backfill(ctx context.Context) error {
 		accounts = append(accounts, v2...)
 		mu.Unlock()
 	}()
+	go func() {
+		defer wg.Done()
+		v3, err := idx.rpcClient.GetProgramAccountsWithOpts(ctx, idx.programID, &rpc.GetProgramAccountsOpts{Filters: v3Filters})
+		if err != nil {
+			err3 = err
+			return
+		}
+		mu.Lock()
+		accounts = append(accounts, v3...)
+		mu.Unlock()
+	}()
+	go func() {
+		defer wg.Done()
+		v4, err := idx.rpcClient.GetProgramAccountsWithOpts(ctx, idx.programID, &rpc.GetProgramAccountsOpts{Filters: v4Filters})
+		if err != nil {
+			err4 = err
+			return
+		}
+		mu.Lock()
+		accounts = append(accounts, v4...)
+		mu.Unlock()
+	}()
 	wg.Wait()
 
 	if err1 != nil {
@@ -116,6 +146,12 @@ func (idx *WagerIndexer) backfill(ctx context.Context) error {
 	}
 	if err2 != nil {
 		return err2
+	}
+	if err3 != nil {
+		return err3
+	}
+	if err4 != nil {
+		return err4
 	}
 
 	currentWagers, err := idx.cache.ListWagers(ctx)
@@ -182,7 +218,7 @@ func (idx *WagerIndexer) runWSSubscription(ctx context.Context) error {
 		if err != nil {
 			return err
 		}
-		
+
 		if got.Value.Account.Lamports == 0 || len(got.Value.Account.Data.GetBinary()) == 0 {
 			if err := idx.cache.DeleteWager(ctx, got.Value.Pubkey.String()); err != nil {
 				slog.Error("wager indexer ws delete failed", "pubkey", got.Value.Pubkey.String(), "err", err)

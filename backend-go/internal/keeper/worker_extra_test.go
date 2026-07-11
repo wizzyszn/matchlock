@@ -24,6 +24,7 @@ func (badValidationTxline) FetchStatValidation(ctx context.Context, fixtureID in
 			EventStatsSubTreeRoot: "not-valid-hash",
 		},
 		EventStatRoot: "also-bad",
+		StatToProve:   txline.ScoreStatResponse{Key: statKey, Value: 1, Period: 0},
 	}, nil
 }
 
@@ -38,17 +39,23 @@ func (r *recordFailCache) MarkSettled(ctx context.Context, rec cache.SettlementR
 	return r.memCache.MarkSettled(ctx, rec)
 }
 
-func TestSettleMatchValidationMappingError(t *testing.T) {
+func TestSettleMatchValidationMappingErrorQueuesWager(t *testing.T) {
+	c := newMemCache()
+	sc := &fakeSolana{}
 	w := &Worker{
-		Cache:      newMemCache(),
+		Cache:      c,
 		Txline:     badValidationTxline{},
-		Solana:     &fakeSolana{},
+		Solana:     sc,
 		KeeperKey:  solana.NewWallet().PrivateKey,
 		StatKey:    1002,
 		AutoSettle: true,
 	}
-	if err := w.SettleMatch(context.Background(), finalScoreUpdate()); err == nil {
-		t.Fatal("expected validation mapping error")
+	update := finalScoreUpdate()
+	if err := w.SettleMatch(context.Background(), update); err != nil {
+		t.Fatalf("mapping error should queue per wager: %v", err)
+	}
+	if _, err := c.GetPendingSettlement(context.Background(), update.MatchID(), sc.storedWager.Pubkey.String()); err != nil {
+		t.Fatalf("expected mapping failure to be queued: %v", err)
 	}
 }
 

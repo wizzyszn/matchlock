@@ -165,7 +165,7 @@ func (w *Worker) processPendingItem(ctx context.Context, item cache.PendingSettl
 		return fmt.Errorf("cannot determine winner for pending match %s", item.MatchID)
 	}
 
-	validation, _, err := w.fetchWinStatValidation(ctx, item.FixtureID, item.Seq, winningSide, update.Participant1IsHome)
+	validation, _, err := w.fetchDeclaredWinStatValidation(ctx, update.FixtureID, update.Seq, winningSide, wager.Participant1IsHome)
 	if err != nil {
 		w.enqueuePendingSettlement(ctx, update, wager, err)
 		return err

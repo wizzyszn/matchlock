@@ -77,7 +77,7 @@ func (w *ScheduleWorker) syncOnce(ctx context.Context) error {
 
 		if shouldHydrateScores(fixture.StartTime, now) {
 			if rows, err := w.Txline.FetchScoreSnapshot(ctx, fixture.FixtureID); err == nil {
-				if row, err := txline.LatestScoreSnapshot(rows); err == nil {
+				if row, err := latestSettlementSnapshot(rows); err == nil {
 					if update, err := row.ToScoreUpdate(); err == nil {
 						match = cache.ApplyScoreUpdate(match, update)
 						hydrated++

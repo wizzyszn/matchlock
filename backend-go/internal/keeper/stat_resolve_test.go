@@ -4,8 +4,8 @@ import (
 	"context"
 	"testing"
 
-	"github.com/matchlock/backend-go/internal/txline"
 	chainsol "github.com/matchlock/backend-go/internal/solana"
+	"github.com/matchlock/backend-go/internal/txline"
 )
 
 type probeTxline struct {
@@ -22,19 +22,29 @@ func (p probeTxline) FetchScoreSnapshot(ctx context.Context, fixtureID int64) ([
 	return nil, nil
 }
 
-func TestFetchWinStatValidationProbesOutcomeStats(t *testing.T) {
+func TestFetchDeclaredWinStatValidationUsesWagerOrientation(t *testing.T) {
+	w := &Worker{Txline: probeTxline{stats: map[uint32]uint32{
+		statKeyP1Win: 1,
+		statKeyP2Win: 0,
+	}}}
+	v, key, err := w.fetchDeclaredWinStatValidation(context.Background(), 18179763, 941, chainsol.SideHome, true)
+	if err != nil {
+		t.Fatalf("fetchDeclaredWinStatValidation: %v", err)
+	}
+	if key != statKeyP1Win {
+		t.Fatalf("stat key = %d, want %d", key, statKeyP1Win)
+	}
+	if v.StatToProve.Value != 1 {
+		t.Fatalf("stat value = %d", v.StatToProve.Value)
+	}
+}
+
+func TestFetchDeclaredWinStatValidationRejectsWrongOrientationStat(t *testing.T) {
 	w := &Worker{Txline: probeTxline{stats: map[uint32]uint32{
 		statKeyP1Win: 0,
 		statKeyP2Win: 1,
 	}}}
-	v, key, err := w.fetchWinStatValidation(context.Background(), 18179763, 941, chainsol.SideHome, true)
-	if err != nil {
-		t.Fatalf("fetchWinStatValidation: %v", err)
-	}
-	if key != statKeyP2Win {
-		t.Fatalf("stat key = %d, want %d", key, statKeyP2Win)
-	}
-	if v.StatToProve.Value != 1 {
-		t.Fatalf("stat value = %d", v.StatToProve.Value)
+	if _, _, err := w.fetchDeclaredWinStatValidation(context.Background(), 18179763, 941, chainsol.SideHome, true); err == nil {
+		t.Fatal("expected declared stat mismatch to fail")
 	}
 }
