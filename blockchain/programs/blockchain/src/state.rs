@@ -13,6 +13,8 @@ pub enum Side {
     Home,
     Away,
     Draw,
+    /// Sentinel value before taker_side is set (never used in comparison logic).
+    Unset,
 }
 
 /// WalletProfile binds a Solana wallet to a Matchlock platform user (one wallet → one user).
@@ -32,6 +34,10 @@ pub struct Config {
     pub stablecoin_mint: Pubkey,
     pub txline_program: Pubkey,
     pub bump: u8,
+    /// When true, make_wager, accept_wager, and register_wallet are disabled.
+    /// cancel_wager, settle_wager, and unregister_wallet remain available so
+    /// funds are never trapped.
+    pub paused: bool,
 }
 
 #[account]

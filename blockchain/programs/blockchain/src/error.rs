@@ -38,4 +38,6 @@ pub enum ErrorCode {
     WalletAlreadyRegistered,
     #[msg("Invalid wallet pubkey")]
     InvalidWallet,
+    #[msg("Contract is paused — this action is currently disabled")]
+    ContractPaused,
 }

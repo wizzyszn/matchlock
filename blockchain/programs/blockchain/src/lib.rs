@@ -74,4 +74,20 @@ pub mod blockchain {
     ) -> Result<()> {
         instructions::settle_wager::handle_settle_wager(ctx, validation, winning_side, merkle_root)
     }
+
+    pub fn update_config(
+        ctx: Context<UpdateConfig>,
+        new_authority: Option<Pubkey>,
+        new_stablecoin_mint: Option<Pubkey>,
+        new_txline_program: Option<Pubkey>,
+        paused: Option<bool>,
+    ) -> Result<()> {
+        instructions::update_config::handle_update_config(
+            ctx,
+            new_authority,
+            new_stablecoin_mint,
+            new_txline_program,
+            paused,
+        )
+    }
 }

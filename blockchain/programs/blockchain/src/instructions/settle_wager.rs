@@ -199,7 +199,7 @@ fn validate_settlement_proof(
     );
 
     let stat_key = validation.stat_a.stat_to_prove.key;
-    let expected_stat_key = stat_key_for_winning_side(winning_side, wager.participant1_is_home);
+    let expected_stat_key = stat_key_for_winning_side(winning_side, wager.participant1_is_home)?;
     require!(
         stat_key == expected_stat_key,
         ErrorCode::InvalidSettlementProof,
@@ -207,23 +207,24 @@ fn validate_settlement_proof(
     Ok(())
 }
 
-fn stat_key_for_winning_side(winning_side: Side, participant1_is_home: bool) -> u32 {
+fn stat_key_for_winning_side(winning_side: Side, participant1_is_home: bool) -> Result<u32> {
     match winning_side {
-        Side::Draw => TXLINE_STAT_DRAW,
+        Side::Draw => Ok(TXLINE_STAT_DRAW),
         Side::Home => {
             if participant1_is_home {
-                TXLINE_STAT_P1_WIN
+                Ok(TXLINE_STAT_P1_WIN)
             } else {
-                TXLINE_STAT_P2_WIN
+                Ok(TXLINE_STAT_P2_WIN)
             }
         }
         Side::Away => {
             if participant1_is_home {
-                TXLINE_STAT_P2_WIN
+                Ok(TXLINE_STAT_P2_WIN)
             } else {
-                TXLINE_STAT_P1_WIN
+                Ok(TXLINE_STAT_P1_WIN)
             }
         }
+        Side::Unset => Err(ErrorCode::InvalidWinningSide.into()),
     }
 }
 

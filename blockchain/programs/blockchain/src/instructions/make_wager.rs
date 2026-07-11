@@ -79,6 +79,7 @@ pub fn handle_make_wager(
         ErrorCode::InvalidMatchId,
     );
     require!(stake_amount > 0, ErrorCode::InvalidStake);
+    require!(!ctx.accounts.config.paused, ErrorCode::ContractPaused,);
     if invited_taker != Pubkey::default() {
         require_keys_neq!(
             invited_taker,
@@ -96,7 +97,7 @@ pub fn handle_make_wager(
     wager.match_id_len = match_id.len() as u8;
     wager.participant1_is_home = participant1_is_home;
     wager.maker_side = maker_side;
-    wager.taker_side = Side::Home;
+    wager.taker_side = Side::Unset;
     wager.stake_amount = stake_amount;
     wager.status = WagerStatus::Open;
     wager.nonce = nonce;

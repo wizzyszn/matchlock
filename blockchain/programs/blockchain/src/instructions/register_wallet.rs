@@ -32,6 +32,7 @@ pub fn handle_register_wallet(
     wallet: Pubkey,
     user_id_hash: [u8; 32],
 ) -> Result<()> {
+    require!(!ctx.accounts.config.paused, ErrorCode::ContractPaused,);
     require!(wallet != Pubkey::default(), ErrorCode::InvalidWallet);
 
     let profile = &mut ctx.accounts.wallet_profile;
