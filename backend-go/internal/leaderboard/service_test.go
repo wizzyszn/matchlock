@@ -17,6 +17,7 @@ func testDB(t *testing.T) *gorm.DB {
 		t.Fatalf("Open test db: %v", err)
 	}
 	cleanup := func() {
+		gdb.Unscoped().Where("1 = 1").Delete(&db.LeaderboardSettlement{})
 		gdb.Unscoped().Where("1 = 1").Delete(&db.LeaderboardEntry{})
 		gdb.Unscoped().Where("1 = 1").Delete(&db.WalletLink{})
 		gdb.Unscoped().Where("1 = 1").Delete(&db.User{})
@@ -57,6 +58,7 @@ func TestRecordSettlement_CreatesEntries(t *testing.T) {
 	seedWalletLink(gdb, loserID, "loserpubkey456")
 
 	err := svc.RecordSettlement(ctx, SettlementEvent{
+		WagerPubkey:  "wager-1",
 		WinnerPubkey: "winnerpubkey123",
 		LoserPubkey:  "loserpubkey456",
 		Stake:        100,
@@ -119,6 +121,7 @@ func TestRecordSettlement_UpdatesExisting(t *testing.T) {
 	})
 
 	err := svc.RecordSettlement(ctx, SettlementEvent{
+		WagerPubkey:  "wager-2",
 		WinnerPubkey: "pubkey1",
 		LoserPubkey:  "unknownpubkey",
 		Stake:        200,
@@ -144,6 +147,47 @@ func TestRecordSettlement_UpdatesExisting(t *testing.T) {
 	}
 	if entry.TotalWagers != 6 {
 		t.Fatalf("total_wagers=%d, want 6", entry.TotalWagers)
+	}
+}
+
+func TestRecordSettlement_IsIdempotentPerWager(t *testing.T) {
+	gdb := testDB(t)
+	svc := NewService(gdb)
+	ctx := context.Background()
+
+	winnerID := uuid.New()
+	loserID := uuid.New()
+	seedUser(gdb, winnerID, "winner@test.com", "Winner")
+	seedUser(gdb, loserID, "loser@test.com", "Loser")
+	seedWalletLink(gdb, winnerID, "winnerpubkey123")
+	seedWalletLink(gdb, loserID, "loserpubkey456")
+
+	ev := SettlementEvent{
+		WagerPubkey:  "wager-dup",
+		WinnerPubkey: "winnerpubkey123",
+		LoserPubkey:  "loserpubkey456",
+		Stake:        100,
+		MatchID:      "match-dup",
+	}
+	if err := svc.RecordSettlement(ctx, ev); err != nil {
+		t.Fatalf("first RecordSettlement: %v", err)
+	}
+	if err := svc.RecordSettlement(ctx, ev); err != nil {
+		t.Fatalf("second RecordSettlement: %v", err)
+	}
+
+	var winnerEntry db.LeaderboardEntry
+	if err := gdb.Where("user_id = ?", winnerID).First(&winnerEntry).Error; err != nil {
+		t.Fatalf("find winner entry: %v", err)
+	}
+	if winnerEntry.TotalWagers != 1 || winnerEntry.Wins != 1 || winnerEntry.NetPnL != 100 {
+		t.Fatalf("winner entry = %+v", winnerEntry)
+	}
+
+	var synced int64
+	gdb.Model(&db.LeaderboardSettlement{}).Where("wager_pubkey = ?", "wager-dup").Count(&synced)
+	if synced != 1 {
+		t.Fatalf("settlement sync rows = %d, want 1", synced)
 	}
 }
 
@@ -178,13 +222,20 @@ func TestGetLeaderboard_ReturnsRanked(t *testing.T) {
 		})
 	}
 
-	entries, err := svc.GetLeaderboard(ctx, 10)
+	page, err := svc.GetLeaderboard(ctx, 0, 10)
 	if err != nil {
 		t.Fatalf("GetLeaderboard: %v", err)
 	}
 
+	entries := page.Entries
 	if len(entries) != 3 {
 		t.Fatalf("got %d entries, want 3", len(entries))
+	}
+	if page.Total != 3 {
+		t.Fatalf("total=%d, want 3", page.Total)
+	}
+	if page.HasMore {
+		t.Fatal("has_more should be false")
 	}
 	if entries[0].NetPnL != 500 || entries[0].Rank != 1 {
 		t.Fatalf("rank 1: pnl=%d rank=%d, want pnl=500 rank=1", entries[0].NetPnL, entries[0].Rank)
@@ -213,23 +264,39 @@ func TestGetLeaderboard_RespectsLimit(t *testing.T) {
 		})
 	}
 
-	t.Run("limit 3", func(t *testing.T) {
-		entries, err := svc.GetLeaderboard(ctx, 3)
+	t.Run("limit 3 offset 0", func(t *testing.T) {
+		page, err := svc.GetLeaderboard(ctx, 0, 3)
 		if err != nil {
 			t.Fatalf("GetLeaderboard: %v", err)
 		}
-		if len(entries) != 3 {
-			t.Fatalf("got %d entries, want 3", len(entries))
+		if len(page.Entries) != 3 {
+			t.Fatalf("got %d entries, want 3", len(page.Entries))
+		}
+		if !page.HasMore {
+			t.Fatal("has_more should be true")
 		}
 	})
 
-	t.Run("zero uses default 20", func(t *testing.T) {
-		entries, err := svc.GetLeaderboard(ctx, 0)
+	t.Run("offset skips first entries", func(t *testing.T) {
+		page, err := svc.GetLeaderboard(ctx, 3, 3)
 		if err != nil {
 			t.Fatalf("GetLeaderboard: %v", err)
 		}
-		if len(entries) != 5 {
-			t.Fatalf("got %d entries, want 5", len(entries))
+		if len(page.Entries) != 2 {
+			t.Fatalf("got %d entries, want 2", len(page.Entries))
+		}
+		if page.Offset != 3 {
+			t.Fatalf("offset=%d, want 3", page.Offset)
+		}
+	})
+
+	t.Run("zero limit uses default 20", func(t *testing.T) {
+		page, err := svc.GetLeaderboard(ctx, 0, 0)
+		if err != nil {
+			t.Fatalf("GetLeaderboard: %v", err)
+		}
+		if len(page.Entries) != 5 {
+			t.Fatalf("got %d entries, want 5", len(page.Entries))
 		}
 	})
 }
@@ -275,6 +342,61 @@ func TestGetRank_ReturnsCorrectRank(t *testing.T) {
 	}
 }
 
+func TestGetRank_UsesSameTiebreakersAsLeaderboard(t *testing.T) {
+	gdb := testDB(t)
+	svc := NewService(gdb)
+	ctx := context.Background()
+
+	firstID := uuid.MustParse("00000000-0000-0000-0000-000000000001")
+	secondID := uuid.MustParse("00000000-0000-0000-0000-000000000002")
+	for _, row := range []db.LeaderboardEntry{
+		{
+			UserID:      secondID,
+			Email:       "second@test.com",
+			DisplayName: "Second",
+			TotalWagers: 5,
+			Wins:        3,
+			Losses:      2,
+			TotalVolume: 2_000,
+			NetPnL:      500,
+		},
+		{
+			UserID:      firstID,
+			Email:       "first@test.com",
+			DisplayName: "First",
+			TotalWagers: 5,
+			Wins:        3,
+			Losses:      2,
+			TotalVolume: 2_000,
+			NetPnL:      500,
+		},
+	} {
+		seedUser(gdb, row.UserID, row.Email, row.DisplayName)
+		if err := gdb.Create(&row).Error; err != nil {
+			t.Fatalf("seed row: %v", err)
+		}
+	}
+
+	page, err := svc.GetLeaderboard(ctx, 0, 10)
+	if err != nil {
+		t.Fatalf("GetLeaderboard: %v", err)
+	}
+	if len(page.Entries) != 2 {
+		t.Fatalf("entries=%d, want 2", len(page.Entries))
+	}
+	if page.Entries[0].UserID != firstID.String() {
+		t.Fatalf("leaderboard first user=%s, want %s", page.Entries[0].UserID, firstID.String())
+	}
+
+	entry, err := svc.GetRank(ctx, firstID)
+	if err != nil {
+		t.Fatalf("GetRank: %v", err)
+	}
+	if entry == nil || entry.Rank != 1 {
+		t.Fatalf("rank entry = %+v, want rank 1", entry)
+	}
+}
+
 func TestGetRank_ReturnsNilForNoEntry(t *testing.T) {
 	gdb := testDB(t)
 	svc := NewService(gdb)
@@ -295,6 +417,7 @@ func TestRecordSettlement_SkipsUnlinkedPubkey(t *testing.T) {
 	ctx := context.Background()
 
 	err := svc.RecordSettlement(ctx, SettlementEvent{
+		WagerPubkey:  "wager-3",
 		WinnerPubkey: "nobody",
 		LoserPubkey:  "noone",
 		Stake:        100,
@@ -331,15 +454,15 @@ func TestEntry_WinRate(t *testing.T) {
 		NetPnL:      400,
 	})
 
-	entries, err := svc.GetLeaderboard(ctx, 1)
+	page, err := svc.GetLeaderboard(ctx, 0, 1)
 	if err != nil {
 		t.Fatalf("GetLeaderboard: %v", err)
 	}
-	if len(entries) == 0 {
+	if len(page.Entries) == 0 {
 		t.Fatal("no entries")
 	}
-	if entries[0].WinRate != 70.0 {
-		t.Fatalf("win_rate=%f, want 70.0", entries[0].WinRate)
+	if page.Entries[0].WinRate != 70.0 {
+		t.Fatalf("win_rate=%f, want 70.0", page.Entries[0].WinRate)
 	}
 
 	entry, err := svc.GetRank(ctx, userID)
@@ -351,5 +474,57 @@ func TestEntry_WinRate(t *testing.T) {
 	}
 	if entry.WinRate != 70.0 {
 		t.Fatalf("win_rate=%f, want 70.0", entry.WinRate)
+	}
+}
+
+func TestGetStats_AggregatesAllRows(t *testing.T) {
+	gdb := testDB(t)
+	svc := NewService(gdb)
+	ctx := context.Background()
+
+	rows := []db.LeaderboardEntry{
+		{
+			UserID:      uuid.New(),
+			Email:       "a@test.com",
+			DisplayName: "A",
+			TotalWagers: 10,
+			Wins:        7,
+			Losses:      3,
+			TotalVolume: 2_000,
+			NetPnL:      400,
+		},
+		{
+			UserID:      uuid.New(),
+			Email:       "b@test.com",
+			DisplayName: "B",
+			TotalWagers: 4,
+			Wins:        1,
+			Losses:      3,
+			TotalVolume: 800,
+			NetPnL:      -100,
+		},
+	}
+	for _, row := range rows {
+		seedUser(gdb, row.UserID, row.Email, row.DisplayName)
+		if err := gdb.Create(&row).Error; err != nil {
+			t.Fatalf("seed row: %v", err)
+		}
+	}
+
+	stats, err := svc.GetStats(ctx)
+	if err != nil {
+		t.Fatalf("GetStats: %v", err)
+	}
+	if stats.TotalUsers != 2 {
+		t.Fatalf("total_users=%d, want 2", stats.TotalUsers)
+	}
+	if stats.TotalWagers != 14 {
+		t.Fatalf("total_wagers=%d, want 14", stats.TotalWagers)
+	}
+	if stats.TotalVolume != 2_800 {
+		t.Fatalf("total_volume=%d, want 2800", stats.TotalVolume)
+	}
+	if stats.AvgWinRate != 47.5 {
+		t.Fatalf("avg_win_rate=%f, want 47.5", stats.AvgWinRate)
 	}
 }

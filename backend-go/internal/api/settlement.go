@@ -3,22 +3,24 @@ package api
 import (
 	"context"
 	"errors"
+	"log/slog"
 	"strings"
 	"time"
 
 	"github.com/gagliardetto/solana-go"
 	"github.com/matchlock/backend-go/internal/cache"
+	"github.com/matchlock/backend-go/internal/keeper"
 	chainsol "github.com/matchlock/backend-go/internal/solana"
 )
 
 const (
-	settlementStateMatchLive              = "match_live"
-	settlementStateMatchEndedUnverified   = "match_ended_unverified"
-	settlementStateQueued                 = "queued"
-	settlementStateRetrying               = "retrying"
-	settlementStateSettled                = "settled"
-	settlementStateFailed                 = "failed"
-	settlementStateNotApplicable          = "not_applicable"
+	settlementStateMatchLive            = "match_live"
+	settlementStateMatchEndedUnverified = "match_ended_unverified"
+	settlementStateQueued               = "queued"
+	settlementStateRetrying             = "retrying"
+	settlementStateSettled              = "settled"
+	settlementStateFailed               = "failed"
+	settlementStateNotApplicable        = "not_applicable"
 )
 
 // SettlementStore reads settlement queue and history from cache.
@@ -64,7 +66,7 @@ func resolveWagerSettlement(
 		view.State = settlementStateMatchLive
 		return view
 	}
-	if match.FinalSource == cache.FinalSourceInferred {
+	if match.FinalSource != cache.FinalSourceTxline {
 		view.State = settlementStateMatchEndedUnverified
 	}
 
@@ -114,7 +116,7 @@ func settlementUserMessage(state string) string {
 	case settlementStateMatchEndedUnverified:
 		return "The match has ended. We're confirming the official final score before paying out."
 	case settlementStateQueued, settlementStateRetrying:
-		return "Settlement is underway. Payout will arrive in your wallet shortly."
+		return "The final result is verified. Settlement is ready or already being processed on-chain."
 	case settlementStateFailed:
 		return "Settlement is taking longer than usual. Our system is still working on it."
 	case settlementStateSettled:
@@ -122,6 +124,40 @@ func settlementUserMessage(state string) string {
 	default:
 		return ""
 	}
+}
+
+func (h *handler) refreshVerifiedFinalForWager(ctx context.Context, wager chainsol.Wager) {
+	if h.txlineData == nil || h.cache == nil {
+		return
+	}
+	match, err := h.cache.GetMatch(ctx, wager.MatchIDString())
+	if err != nil {
+		return
+	}
+	candidate := cache.InferFinalState(match, time.Now().UTC())
+	if !candidate.IsFinal || candidate.FinalSource == cache.FinalSourceTxline {
+		return
+	}
+
+	worker := &keeper.Worker{Cache: h.cache, Txline: h.txlineData}
+	if _, _, err := worker.RefreshVerifiedFinal(ctx, candidate); err != nil {
+		slog.Debug("settlement final verification unavailable",
+			"match_id", candidate.MatchID,
+			"err", err,
+		)
+	}
+}
+
+func (h *handler) matchForLeaderboardSync(ctx context.Context, wager chainsol.Wager) (cache.Match, bool) {
+	h.refreshVerifiedFinalForWager(ctx, wager)
+	match, err := h.cache.GetMatch(ctx, wager.MatchIDString())
+	if err != nil {
+		return cache.Match{}, false
+	}
+	if !match.IsFinal || match.HomeGoals == nil || match.AwayGoals == nil {
+		return cache.Match{}, false
+	}
+	return match, true
 }
 
 func settlementViewFromCache(view cache.WagerSettlementView) SettlementStatusView {

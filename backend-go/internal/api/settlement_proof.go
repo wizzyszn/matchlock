@@ -45,6 +45,8 @@ func (h *handler) getWagerSettlementProof(w http.ResponseWriter, r *http.Request
 		switch {
 		case strings.Contains(msg, "not final"):
 			writeError(w, http.StatusConflict, "MATCH_NOT_FINAL", "match is not final yet")
+		case strings.Contains(msg, "not verified"):
+			writeError(w, http.StatusConflict, "MATCH_NOT_VERIFIED", "final score is not verified yet")
 		case strings.Contains(msg, "not matched"):
 			writeError(w, http.StatusConflict, "INVALID_STATUS", "wager is not eligible for settlement")
 		default:
