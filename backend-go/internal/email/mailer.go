@@ -1,57 +1,30 @@
 package email
 
 import (
+	"context"
 	"fmt"
-	"net/smtp"
 	"strings"
+
+	brevo "github.com/getbrevo/brevo-go/lib"
 )
 
-type loginAuth struct {
-	username, password string
-}
-
-func (a *loginAuth) Start(server *smtp.ServerInfo) (string, []byte, error) {
-	return "LOGIN", nil, nil
-}
-
-func (a *loginAuth) Next(fromServer []byte, more bool) ([]byte, error) {
-	if !more {
-		return nil, nil
-	}
-	msg := strings.ToLower(string(fromServer))
-	switch {
-	case strings.Contains(msg, "username"):
-		return []byte(a.username), nil
-	case strings.Contains(msg, "password"):
-		return []byte(a.password), nil
-	default:
-		return nil, fmt.Errorf("unexpected server challenge: %s", fromServer)
-	}
-}
-
-func chooseAuth(cfg Config) smtp.Auth {
-	if cfg.Username == "" {
-		return nil
-	}
-	return &loginAuth{cfg.Username, cfg.Password}
-}
-
-// Config holds Mailtrap / SMTP settings.
+// Config holds Brevo transactional email settings.
 type Config struct {
-	Host     string
-	Port     int
-	Username string
-	Password string
-	From     string
+	APIKey string
+	From   string
 }
 
-// Mailer sends transactional email via SMTP (Mailtrap in dev).
+// Mailer sends transactional email via Brevo.
 type Mailer struct {
+	api *brevo.TransactionalEmailsApiService
 	cfg Config
 }
 
 func NewMailer(cfg Config) *Mailer {
-	return &Mailer{cfg: cfg}
+	clientCfg := brevo.NewConfiguration()
+	clientCfg.AddDefaultHeader("api-key", cfg.APIKey)
+	client := brevo.NewAPIClient(clientCfg)
+	return &Mailer{api: client.TransactionalEmailsApi, cfg: cfg}
 }
 
 func (m *Mailer) SendMagicLink(to, link string) error {
@@ -84,43 +57,47 @@ func (m *Mailer) SendWagerInvite(to, makerEmail, matchLabel, inviteURL string) e
 }
 
 func (m *Mailer) send(to, subject, body string) error {
-	if m.cfg.Host == "" {
-		return fmt.Errorf("smtp host not configured")
-	}
-	addr := fmt.Sprintf("%s:%d", m.cfg.Host, m.cfg.Port)
-
-	envelopeFrom := m.cfg.Username
-	displayFrom := m.cfg.From
-	if envelopeFrom != "" {
-		displayFrom = envelopeFrom
-	} else if displayFrom == "" {
-		displayFrom = "Matchlock <noreply@matchlock.dev>"
-		envelopeFrom = "noreply@matchlock.dev"
+	if strings.TrimSpace(m.cfg.APIKey) == "" {
+		return fmt.Errorf("brevo api key not configured")
 	}
 
-	msg := strings.Join([]string{
-		fmt.Sprintf("From: %s", displayFrom),
-		fmt.Sprintf("To: %s", to),
-		fmt.Sprintf("Subject: %s", subject),
-		"MIME-Version: 1.0",
-		"Content-Type: text/plain; charset=UTF-8",
-		"",
-		body,
-	}, "\r\n")
+	fromName, fromEmail := parseFrom(m.cfg.From)
+	if fromEmail == "" {
+		fromName = "Matchlock"
+		fromEmail = "noreply@matchlock.dev"
+	}
 
-	auth := chooseAuth(m.cfg)
-	if err := smtp.SendMail(addr, auth, envelopeFrom, []string{to}, []byte(msg)); err != nil {
-		return fmt.Errorf("smtp send: %w", err)
+	message := brevo.SendSmtpEmail{
+		Sender: &brevo.SendSmtpEmailSender{
+			Name:  fromName,
+			Email: fromEmail,
+		},
+		To: []brevo.SendSmtpEmailTo{
+			{Email: to},
+		},
+		Subject:     subject,
+		TextContent: body,
+	}
+
+	if _, _, err := m.api.SendTransacEmail(context.Background(), message); err != nil {
+		return fmt.Errorf("brevo send: %w", err)
 	}
 	return nil
 }
 
-func extractEmail(from string) string {
+func parseFrom(from string) (name, email string) {
+	from = strings.TrimSpace(from)
+	if from == "" {
+		return "", ""
+	}
 	if i := strings.Index(from, "<"); i >= 0 {
 		end := strings.Index(from, ">")
 		if end > i {
-			return strings.TrimSpace(from[i+1 : end])
+			name = strings.TrimSpace(from[:i])
+			email = strings.TrimSpace(from[i+1 : end])
+			name = strings.Trim(name, "\"")
+			return name, email
 		}
 	}
-	return strings.TrimSpace(from)
+	return "", from
 }

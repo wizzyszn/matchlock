@@ -76,11 +76,8 @@ func main() {
 	}
 
 	mailer := email.NewMailer(email.Config{
-		Host:     cfg.SMTPHost,
-		Port:     cfg.SMTPPort,
-		Username: cfg.SMTPUser,
-		Password: cfg.SMTPPass,
-		From:     cfg.SMTPFrom,
+		APIKey: cfg.BrevoAPIKey,
+		From:   cfg.BrevoFrom,
 	})
 	emailQueue := email.NewQueue(mailer, 128)
 	go emailQueue.Start(ctx)

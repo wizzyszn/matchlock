@@ -7,7 +7,7 @@ import (
 )
 
 func TestEnqueueRejectsWhenBufferFull(t *testing.T) {
-	mailer := NewMailer(Config{Host: "localhost", Port: 1025})
+	mailer := NewMailer(Config{APIKey: "test-key"})
 	q := NewQueue(mailer, 1)
 	q.ch <- Job{Type: JobMagicLink, To: "a@test.com", Link: "http://x"}
 
@@ -18,7 +18,7 @@ func TestEnqueueRejectsWhenBufferFull(t *testing.T) {
 }
 
 func TestStartProcessesJobs(t *testing.T) {
-	mailer := NewMailer(Config{Host: "127.0.0.1", Port: 1})
+	mailer := NewMailer(Config{APIKey: "test-key"})
 	q := NewQueue(mailer, 4)
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()

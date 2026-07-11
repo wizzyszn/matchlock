@@ -11,8 +11,7 @@ func setTestAuthEnv(t *testing.T) {
 	t.Helper()
 	t.Setenv("DATABASE_URL", "postgres://matchlock:matchlock@127.0.0.1:5432/matchlock?sslmode=disable")
 	t.Setenv("JWT_ACCESS_SECRET", "test-jwt-access-secret-at-least-32-chars-long")
-	t.Setenv("SMTP_USER", "test-smtp-user")
-	t.Setenv("SMTP_PASS", "test-smtp-pass")
+	t.Setenv("BREVO_API_KEY", "test-brevo-api-key")
 }
 
 func TestLoadDevnetDefaults(t *testing.T) {

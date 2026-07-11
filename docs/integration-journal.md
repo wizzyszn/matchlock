@@ -28,7 +28,7 @@ Areas: `blockchain` · `backend-go` · `frontend-react` · `txline-api` · `cros
 5. **World Cup free tier** — skip TxL purchase for hackathon; use World Cup docs for instant API access. (`txline-api`)
 6. **Winner-claim settlement** — `KEEPER_AUTO_SETTLE=false` by default; backend brokers TxLINE proofs, winner wallet signs `settle_wager` as `settler` and pays SOL. (`blockchain` + `backend-go` + `frontend-react`)
 7. **Outcome stat probe** — at settlement seq, probe TxLINE stats `1002`/`1003` for `value > 0`; do not trust snapshot `participant1IsHome` alone. (`backend-go`)
-8. **Agenda 4 auth** — magic link via Mailtrap SMTP; access JWT + refresh token in httpOnly cookies (`matchlock_access` / `matchlock_refresh`); Postgres/GORM for users, sessions, wallet links, wager invites. (`backend-go` + `frontend-react`)
+8. **Agenda 4 auth** — magic link via Brevo transactional email; access JWT + refresh token in httpOnly cookies (`matchlock_access` / `matchlock_refresh`); Postgres/GORM for users, sessions, wallet links, wager invites. (`backend-go` + `frontend-react`)
 9. **Vite 8 + node polyfills** — `vite-plugin-node-polyfills@0.28` breaks Rolldown pre-bundling (`init_dist is not a function`); use manual `src/polyfills.ts` + `resolve.alias.buffer` instead. (`frontend-react`)
 
 ---
@@ -476,8 +476,8 @@ After Agenda 1 (challenge slip + draw), ship Agenda 4 before Agenda 3 (faucet UX
 
 #### What shipped
 
-**Auth (refresh cookies + Mailtrap)**
-- `POST /auth/magic-link` → Mailtrap email with link to `{FRONTEND_URL}/auth/verify?token=…`
+**Auth (refresh cookies + Brevo)**
+- `POST /auth/magic-link` → Brevo email with link to `{FRONTEND_URL}/auth/verify?token=…`
 - `GET /auth/verify` → single-use token, issues **access JWT** (`matchlock_access`, 15m) + **refresh token** (`matchlock_refresh`, 7d, rotated on `POST /auth/refresh`)
 - `POST /auth/logout` → revokes refresh session, clears cookies
 - `GET /auth/me`, wallet link (`POST /auth/wallets/challenge` + `POST /auth/wallets/link` with ed25519 signature)
@@ -488,7 +488,7 @@ After Agenda 1 (challenge slip + draw), ship Agenda 4 before Agenda 3 (faucet UX
 
 **Direct challenges**
 - `GET /users/lookup?email=` — resolve friend primary wallet
-- `POST /challenges/invites` + inbox `GET /challenges/invites` — email notification via Mailtrap
+- `POST /challenges/invites` + inbox `GET /challenges/invites` — email notification via Brevo
 - Challenge slip: **Anyone** vs **A friend**; on-chain `invited_taker` when friend has linked wallet
 
 **On-chain (breaking — redeploy required)**
@@ -496,7 +496,7 @@ After Agenda 1 (challenge slip + draw), ship Agenda 4 before Agenda 3 (faucet UX
 - Account size **150** bytes (was 118)
 
 #### Env (`backend-go/.env.example`)
-- `DATABASE_URL`, `JWT_ACCESS_SECRET`, `SMTP_*` (Mailtrap), `FRONTEND_URL`, cookie flags
+- `DATABASE_URL`, `JWT_ACCESS_SECRET`, `BREVO_*`, `FRONTEND_URL`, cookie flags
 
 #### 💡 Tips
 - Magic link = identity only; txs still wallet-signed (non-custodial).

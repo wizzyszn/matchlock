@@ -123,7 +123,9 @@ func TestListWagers(t *testing.T) {
 	calls := 0
 	mock.getProgramAccounts = func() json.RawMessage {
 		calls++
-		if (calls-1)%3 != 0 {
+		// ListWagers probes four known account layouts; return one matching
+		// account per top-level listing call, not per individual RPC probe.
+		if calls != 1 && calls != 5 {
 			return []byte(`[]`)
 		}
 		payload, _ := json.Marshal([]map[string]any{{

@@ -55,11 +55,8 @@ type Config struct {
 	CookieSecure    bool
 	CookieDomain    string
 	FrontendURL     string
-	SMTPHost        string
-	SMTPPort        int
-	SMTPUser        string
-	SMTPPass        string
-	SMTPFrom        string
+	BrevoAPIKey     string
+	BrevoFrom       string
 	LogLevel        string
 	LogEncoding     string
 }
@@ -116,11 +113,8 @@ func loadFromViper(v *viper.Viper) (Config, error) {
 		CookieSecure:            boolValue(v, "COOKIE_SECURE", false),
 		CookieDomain:            strings.TrimSpace(v.GetString("COOKIE_DOMAIN")),
 		FrontendURL:             stringValue(v, "FRONTEND_URL", "http://localhost:3000"),
-		SMTPHost:                stringValue(v, "SMTP_HOST", "smtp.mail.yahoo.com"),
-		SMTPPort:                intValue(v, "SMTP_PORT", 587),
-		SMTPUser:                firstNonEmpty(v.GetString("SMTP_USER"), v.GetString("SMTP_USERNAME")),
-		SMTPPass:                firstNonEmpty(v.GetString("SMTP_PASS"), v.GetString("SMTP_PASSWORD")),
-		SMTPFrom:                stringValue(v, "SMTP_FROM", "Matchlock <noreply@matchlock.dev>"),
+		BrevoAPIKey:             firstNonEmpty(v.GetString("BREVO_API_KEY"), v.GetString("SENDINBLUE_API_KEY")),
+		BrevoFrom:               stringValue(v, "BREVO_FROM", "Matchlock <noreply@matchlock.dev>"),
 		LogLevel:                strings.ToLower(stringValue(v, "LOG_LEVEL", "info")),
 		LogEncoding:             strings.ToLower(stringValue(v, "LOG_ENCODING", "json")),
 	}
@@ -165,9 +159,7 @@ func newViper() *viper.Viper {
 		"MAGIC_LINK_TTL":            "15m",
 		"COOKIE_SECURE":             false,
 		"FRONTEND_URL":              "http://localhost:3000",
-		"SMTP_HOST":                 "smtp.mail.yahoo.com",
-		"SMTP_PORT":                 587,
-		"SMTP_FROM":                 "Matchlock <noreply@matchlock.dev>",
+		"BREVO_FROM":                "Matchlock <noreply@matchlock.dev>",
 		"LOG_LEVEL":                 "info",
 		"LOG_ENCODING":              "json",
 	} {
@@ -341,8 +333,8 @@ func (c Config) validate() error {
 	if _, err := url.ParseRequestURI(c.FrontendURL); err != nil {
 		return fmt.Errorf("invalid FRONTEND_URL: %w", err)
 	}
-	if c.SMTPUser == "" || c.SMTPPass == "" {
-		return fmt.Errorf("SMTP_USER and SMTP_PASS are required")
+	if c.BrevoAPIKey == "" {
+		return fmt.Errorf("BREVO_API_KEY is required")
 	}
 
 	return nil

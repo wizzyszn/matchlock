@@ -59,7 +59,7 @@ func (s *Service) SetWalletRegistrar(registrar WalletRegistrar, keeperKey solana
 	s.keeperKey = keeperKey
 }
 
-// SetEmailQueue enables asynchronous SMTP delivery via a background worker.
+// SetEmailQueue enables asynchronous email delivery via a background worker.
 func (s *Service) SetEmailQueue(q *email.Queue) {
 	s.emailQueue = q
 }

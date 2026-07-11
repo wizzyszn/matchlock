@@ -34,9 +34,6 @@ MAGIC_LINK_TTL: 15m
 COOKIE_SECURE: false
 COOKIE_DOMAIN: ""
 
-# SMTP
-SMTP_HOST: smtp.mail.yahoo.com
-SMTP_PORT: 587
-SMTP_USER: ""
-SMTP_PASS: ""
-SMTP_FROM: "Matchlock <noreply@matchlock.dev>"
+# Brevo transactional email
+BREVO_API_KEY: ""
+BREVO_FROM: "Matchlock <noreply@matchlock.dev>"
