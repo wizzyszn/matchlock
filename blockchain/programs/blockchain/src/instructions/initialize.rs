@@ -29,6 +29,7 @@ pub fn handle_initialize(
     config.stablecoin_mint = stablecoin_mint;
     config.txline_program = txline_program;
     config.bump = ctx.bumps.config;
+    config.paused = false;
 
     msg!(
         "Config initialized: authority={}, mint={}, txline={}",

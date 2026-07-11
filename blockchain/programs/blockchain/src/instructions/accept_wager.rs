@@ -61,6 +61,7 @@ pub struct AcceptWager<'info> {
 }
 
 pub fn handle_accept_wager(ctx: Context<AcceptWager>, taker_side: Side) -> Result<()> {
+    require!(!ctx.accounts.config.paused, ErrorCode::ContractPaused,);
     require_keys_neq!(
         ctx.accounts.taker.key(),
         ctx.accounts.wager.maker,

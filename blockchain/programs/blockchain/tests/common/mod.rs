@@ -357,6 +357,7 @@ impl TestEnv {
             Side::Draw => 1001,
             Side::Home => 1002,
             Side::Away => 1003,
+            Side::Unset => panic!("Unset is not a valid side for validation"),
         };
         self.validation_for_stat_key(stat_key)
     }
