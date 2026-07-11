@@ -19,7 +19,7 @@ const (
 	MainnetTxlineOrigin  = "https://txline.txodds.com"
 	DevnetStablecoinMint = "ELWTKspHKCnCfCiCiqYw1EDH77k8VCP74dK9qytG2Ujh"
 	DevnetTxlineProgram  = "6pW64gN1s2uqjHkn1unFeEjAwJkPGHoppGvS715wyP2J"
-	DefaultProgramID     = "6a1hkAgtuewKaB6B4vt1bMymcFVtK85mGVbVBJkURaZ8"
+	DefaultProgramID     = "7jbdwJLrePo6dr6Jo5sSmK4RQC5tYRrGebnkMFTuPGq5"
 )
 
 // Config holds validated runtime settings for the keeper service.
