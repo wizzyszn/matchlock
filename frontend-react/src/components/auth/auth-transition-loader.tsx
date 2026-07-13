@@ -4,7 +4,7 @@ import { MatchlockLogoAnimated } from "@/components/brand/matchlock-logo-animate
 import { cn } from "@/lib/utils";
 
 type AuthTransitionLoaderProps = {
-  title: string;
+  title?: string;
   subtitle?: string;
   className?: string;
   icon?: ReactNode;
@@ -25,11 +25,11 @@ export function AuthTransitionLoader({
       role="status"
       aria-live="polite"
     >
-      {icon ?? <MatchlockLogoAnimated size={72} />}
-      <div className="space-y-2">
-        <p className="font-heading text-2xl tracking-tight">{title}</p>
+      {icon ?? <MatchlockLogoAnimated size={32} />}
+      <div className="space-y-1">
+        <p className="font-heading text-lg tracking-tight">{title}</p>
         {subtitle ? (
-          <p className="max-w-sm text-sm text-muted-foreground">{subtitle}</p>
+          <p className="max-w-sm text-xs text-muted-foreground">{subtitle}</p>
         ) : null}
       </div>
     </div>

@@ -1,9 +1,6 @@
 package cache
 
-import (
-	"testing"
-	"time"
-)
+import "testing"
 
 func TestScoreUpdateFromMatch(t *testing.T) {
 	home := int32(2)
@@ -28,17 +25,21 @@ func TestScoreUpdateFromMatch(t *testing.T) {
 	}
 }
 
-func TestInferFinalStateSetsSource(t *testing.T) {
+func TestScoreUpdateFromMatchPreservesLiveState(t *testing.T) {
 	home := int32(1)
-	away := int32(0)
-	now := time.Date(2026, 7, 2, 12, 0, 0, 0, time.UTC)
-	match := InferFinalState(Match{
-		MatchID:   "1",
-		StartTime: now.Add(-2 * time.Hour).UnixMilli(),
+	away := int32(1)
+	update, err := ScoreUpdateFromMatch(Match{
+		MatchID:   "18213979",
+		FixtureID: 18213979,
+		GameState: "HT",
+		Seq:       77,
 		HomeGoals: &home,
 		AwayGoals: &away,
-	}, now)
-	if !match.IsFinal || match.FinalSource != FinalSourceInferred {
-		t.Fatalf("match = %#v", match)
+	})
+	if err != nil {
+		t.Fatalf("ScoreUpdateFromMatch: %v", err)
+	}
+	if update.IsFinal() {
+		t.Fatalf("expected live update, got state=%q", update.GameState)
 	}
 }

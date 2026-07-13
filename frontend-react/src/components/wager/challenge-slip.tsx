@@ -1,12 +1,15 @@
 import { useWallet } from '@solana/wallet-adapter-react'
 import { PublicKey } from '@solana/web3.js'
-import { Loader2, Swords } from 'lucide-react'
+import { Loader2, Search } from 'lucide-react'
 import { Link, useNavigate } from 'react-router-dom'
 import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useForm } from 'react-hook-form'
+import { zodResolver } from '@hookform/resolvers/zod'
+import { z } from 'zod'
 import { toast } from 'sonner'
+
 import { useMediaQuery } from '@/hooks/use-media-query'
-
-
+import usdtLogo from '@/assets/usdt-svgrepo-com.svg'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import {
@@ -23,6 +26,7 @@ import {
   SheetHeader,
   SheetTitle,
 } from '@/components/ui/sheet'
+import { PageHeader, PageHeaderHeading, PageHeaderDescription } from '@/components/ui/page-header'
 import { useAuthMutations } from '@/hooks/mutations/use-auth-mutations'
 import { useMatchesQuery } from '@/hooks/queries/use-matches'
 import { useSessionQuery } from '@/hooks/queries/use-session'
@@ -34,7 +38,7 @@ import { useTxFeeEstimate } from '@/hooks/use-tx-fee-estimate'
 import { useWagerTxBuilders } from '@/hooks/use-wager-tx-builders'
 import { useStablecoinLabel } from '@/hooks/use-stablecoin-label'
 import type { Match, Side } from '@/lib/api'
-import { baseUnitsToUsdc, formatUsdc, usdcToBaseUnits } from '@/lib/format'
+import { baseUnitsToUsdt, formatUsdt, usdtToBaseUnits } from '@/lib/format'
 import {
   classifyMatch,
   formatKickoffClock,
@@ -43,6 +47,27 @@ import {
 } from '@/lib/match-display'
 import { sideLabel } from '@/lib/wager-sides'
 
+// ─── Zod schema ──────────────────────────────────────────────────────────────
+
+const slipSchema = z.object({
+  stake: z
+    .string()
+    .min(1, 'Stake is required')
+    .refine(
+      (v) => Number.isFinite(Number(v)) && Number(v) > 0,
+      'Must be a positive amount',
+    ),
+  friendEmail: z
+    .string()
+    .email('Enter a valid email address')
+    .or(z.literal(''))
+    .optional(),
+})
+
+type SlipFormValues = z.infer<typeof slipSchema>
+
+// ─── Types ────────────────────────────────────────────────────────────────────
+
 type ChallengeSlipProps = {
   match: Match
   initialSide?: Side
@@ -50,6 +75,8 @@ type ChallengeSlipProps = {
   onOpenChange?: (open: boolean) => void
   variant?: 'dialog' | 'page'
 }
+
+// ─── Body ─────────────────────────────────────────────────────────────────────
 
 function ChallengeSlipBody({
   match,
@@ -65,45 +92,52 @@ function ChallengeSlipBody({
   const { data: balance = BigInt(0) } = useTokenBalanceQuery()
   const { data: session } = useSessionQuery()
   const { lookupUser, createInvite } = useAuthMutations()
-  const { makeWager, mapError, isWalletReady, walletNeedsLink } =
-    useWagerMutations()
+  const { makeWager, mapError, isWalletReady, walletNeedsLink } = useWagerMutations()
   const walletStatus = useWalletLinkStatus()
   const { buildMake, wallet } = useWagerTxBuilders()
   const stablecoin = useStablecoinLabel()
 
   const [side, setSide] = useState<Side>(initialSide)
   const [challengeMode, setChallengeMode] = useState<'open' | 'friend'>('open')
-  const [friendEmail, setFriendEmail] = useState('')
   const [friendLookup, setFriendLookup] = useState<UserLookup | null>(null)
-  const [stakeInput, setStakeInput] = useState('')
   const [dialogOpen, setDialogOpen] = useState(false)
-  const [confirmDetails, setConfirmDetails] = useState<ConfirmTxDetails | null>(
-    null,
-  )
+  const [confirmDetails, setConfirmDetails] = useState<ConfirmTxDetails | null>(null)
   const [txError, setTxError] = useState<string | null>(null)
   const [signature, setSignature] = useState<string | null>(null)
+
+  const {
+    register,
+    handleSubmit,
+    watch,
+    setValue,
+    reset,
+    formState: { errors },
+  } = useForm<SlipFormValues>({
+    resolver: zodResolver(slipSchema),
+    defaultValues: { stake: '', friendEmail: '' },
+  })
+
+  const stakeRaw = watch('stake')
+  const friendEmail = watch('friendEmail') ?? ''
 
   useEffect(() => {
     setSide(initialSide)
   }, [initialSide, match.match_id])
 
   const labels = matchLabels(match)
-  const stakeUsdc = Number.parseFloat(stakeInput)
-  const stakeValid = Number.isFinite(stakeUsdc) && stakeUsdc > 0
-  const balanceUsdc = baseUnitsToUsdc(balance)
-  const insufficientBalance = stakeValid && stakeUsdc > balanceUsdc
+  const stakeUsdt = Number.parseFloat(stakeRaw)
+  const stakeValid = Number.isFinite(stakeUsdt) && stakeUsdt > 0
+  const balanceUsdt = baseUnitsToUsdt(balance)
+  const insufficientBalance = stakeValid && stakeUsdt > balanceUsdt
   const canChallenge = classifyMatch(match) === 'upcoming' || classifyMatch(match) === 'live'
   const friendEmailNormalized = friendEmail.trim().toLowerCase()
   const isSelfChallenge =
     Boolean(session) &&
     friendEmailNormalized.length > 3 &&
     friendEmailNormalized === session?.email.toLowerCase()
-
   const friendReady =
     challengeMode === 'open' ||
-    (Boolean(session) &&
-      friendLookup !== null &&
-      !isSelfChallenge)
+    (Boolean(session) && friendLookup !== null && !isSelfChallenge)
 
   const handleLookupFriend = async () => {
     const email = friendEmail.trim()
@@ -120,16 +154,15 @@ function ChallengeSlipBody({
     setFriendLookup(result)
   }
 
-  const handleOpenConfirm = () => {
+  const openConfirm = () => {
     if (challengeMode === 'friend' && !friendReady) return
     if (!stakeValid || insufficientBalance || !canChallenge) return
-
     setConfirmDetails({
       action: 'make',
       matchLabel: labels.league,
       sideLabel: sideLabel(side, match),
-      stakeUsdc,
-      payoutUsdc: stakeUsdc * 2,
+      stakeUsdt,
+      payoutUsdt: stakeUsdt * 2,
     })
     setTxError(null)
     setSignature(null)
@@ -137,41 +170,28 @@ function ChallengeSlipBody({
   }
 
   const estimateFee = useCallback(async () => {
-    if (!confirmDetails || confirmDetails.action !== 'make' || !stakeValid) {
-      return null
-    }
+    if (!confirmDetails || confirmDetails.action !== 'make' || !stakeValid) return null
     const invitedTaker =
       challengeMode === 'friend' && friendLookup?.primary_wallet
         ? new PublicKey(friendLookup.primary_wallet)
         : undefined
     return buildMake({
       matchId: match.match_id,
-      stake: usdcToBaseUnits(stakeUsdc),
+      stake: usdtToBaseUnits(stakeUsdt),
       makerSide: side,
       participant1IsHome: match.participant1_is_home,
       invitedTaker,
     })
-  }, [
-    buildMake,
-    challengeMode,
-    confirmDetails,
-    friendLookup?.primary_wallet,
-    match.match_id,
-    match.participant1_is_home,
-    side,
-    stakeUsdc,
-    stakeValid,
-  ])
+  }, [buildMake, challengeMode, confirmDetails, friendLookup?.primary_wallet, match.match_id, match.participant1_is_home, side, stakeUsdt, stakeValid])
 
   const feeEstimate = useTxFeeEstimate({
     enabled: dialogOpen && confirmDetails?.action === 'make',
-    estimateKey: `make-${match.match_id}-${side}-${stakeUsdc}`,
+    estimateKey: `make-${match.match_id}-${side}-${stakeUsdt}`,
     buildTx: estimateFee,
   })
 
   const handleConfirm = async () => {
     if (!stakeValid) return
-
     setTxError(null)
     try {
       const invitedTaker =
@@ -180,7 +200,7 @@ function ChallengeSlipBody({
           : undefined
       const { signature, wagerPubkey } = await makeWager.mutateAsync({
         matchId: match.match_id,
-        stake: usdcToBaseUnits(stakeUsdc),
+        stake: usdtToBaseUnits(stakeUsdt),
         makerSide: side,
         participant1IsHome: match.participant1_is_home,
         invitedTaker,
@@ -193,7 +213,7 @@ function ChallengeSlipBody({
             wager_pubkey: wagerPubkey,
             match_id: match.match_id,
             maker_side: side,
-            stake: Number(usdcToBaseUnits(stakeUsdc)),
+            stake: Number(usdtToBaseUnits(stakeUsdt)),
             home_team: labels.homeTeam,
             away_team: labels.awayTeam,
           })
@@ -204,8 +224,7 @@ function ChallengeSlipBody({
 
       setSignature(signature)
       setDialogOpen(false)
-      setStakeInput('')
-      setFriendEmail('')
+      reset()
       setFriendLookup(null)
       toast.success('Wager created successfully.')
       onSuccess?.()
@@ -219,7 +238,8 @@ function ChallengeSlipBody({
 
   return (
     <>
-      <div className="space-y-5">
+      {/* Match identity */}
+      <div className="space-y-1 mb-6">
         <DuelFrame
           home={labels.homeTeam}
           away={labels.awayTeam}
@@ -228,199 +248,190 @@ function ChallengeSlipBody({
           size="compact"
           layout="inline"
         />
-
-        <div className="flex items-center justify-center gap-3 text-xs text-muted-foreground">
+        <div className="flex items-center justify-center gap-2 pt-1 text-xs text-muted-foreground">
           <span>{formatKickoffDate(match)}</span>
           <span aria-hidden>·</span>
-          <span className="tabular-nums font-medium text-foreground">
-            {formatKickoffClock(match)}
-          </span>
+          <span className="tabular-nums font-medium text-foreground">{formatKickoffClock(match)}</span>
         </div>
+      </div>
 
-        {!canChallenge ? (
-          <p className="rounded-md border border-dashed bg-muted/40 px-3 py-2 text-sm text-muted-foreground">
-            This fixture is finished — pick an upcoming or live match to challenge.
-          </p>
-        ) : (
-          <>
-            <OutcomePicker
-              match={match}
-              sides={['home', 'draw', 'away']}
-              selected={side}
-              onSelect={setSide}
-              hint="Reference odds from TxLINE — your opponent takes one of the other outcomes."
-            />
+      {!canChallenge ? (
+        <p className="rounded-md border border-dashed bg-muted/40 px-3 py-3 text-sm text-muted-foreground text-center">
+          This fixture is finished — pick an upcoming or live match.
+        </p>
+      ) : (
+        <form onSubmit={handleSubmit(openConfirm)} noValidate className="space-y-6">
 
-            <div className="space-y-3 rounded-lg border bg-card p-3">
-              <p className="text-sm font-medium">Who can accept?</p>
-              <div className="flex flex-wrap gap-2">
-                <Button
-                  type="button"
-                  size="sm"
-                  variant={challengeMode === 'open' ? 'default' : 'outline'}
-                  onClick={() => setChallengeMode('open')}
-                >
-                  Anyone
-                </Button>
-                <Button
-                  type="button"
-                  size="sm"
-                  variant={challengeMode === 'friend' ? 'default' : 'outline'}
-                  onClick={() => setChallengeMode('friend')}
-                >
-                  A friend
-                </Button>
-              </div>
-              {challengeMode === 'friend' ? (
-                <div className="space-y-2">
-                  {!session ? (
-                    <p className="text-sm text-muted-foreground">
-                      <Link to="/login" className="text-primary hover:underline">
-                        Sign in
-                      </Link>{' '}
-                      to challenge someone by email.
-                    </p>
-                  ) : (
-                    <>
+          {/* Outcome */}
+          <OutcomePicker
+            match={match}
+            sides={['home', 'draw', 'away']}
+            selected={side}
+            onSelect={setSide}
+            hint="Reference odds from TxLINE — your opponent takes one of the other outcomes."
+          />
+
+          {/* Who can accept */}
+          <div className="space-y-3">
+            <p className="text-sm font-medium">Who can accept?</p>
+            <div className="flex gap-2">
+              <Button
+                type="button"
+                size="sm"
+                variant={challengeMode === 'open' ? 'default' : 'outline'}
+                className="rounded-full"
+                onClick={() => setChallengeMode('open')}
+              >
+                Anyone
+              </Button>
+              <Button
+                type="button"
+                size="sm"
+                variant={challengeMode === 'friend' ? 'default' : 'outline'}
+                className="rounded-full"
+                onClick={() => setChallengeMode('friend')}
+              >
+                A friend
+              </Button>
+            </div>
+
+            {challengeMode === 'friend' && (
+              <div className="space-y-2">
+                {!session ? (
+                  <p className="text-sm text-muted-foreground">
+                    <Link to="/login" className="text-primary hover:underline">Sign in</Link>{' '}
+                    to challenge someone by email.
+                  </p>
+                ) : (
+                  <>
+                    <div className="flex gap-2">
                       <Input
                         type="email"
                         placeholder="friend@example.com"
-                        value={friendEmail}
+                        className="flex-1"
+                        {...register('friendEmail')}
                         onChange={(e) => {
-                          setFriendEmail(e.target.value)
+                          void register('friendEmail').onChange(e)
                           setFriendLookup(null)
                         }}
                       />
                       <Button
                         type="button"
-                        size="sm"
+                        size="icon"
                         variant="outline"
+                        className="shrink-0"
                         disabled={!friendEmail.trim() || lookupUser.isPending}
                         onClick={() => void handleLookupFriend()}
+                        aria-label="Find friend"
                       >
-                        {lookupUser.isPending ? 'Looking up…' : 'Find friend'}
+                        {lookupUser.isPending ? <Loader2 className="size-4 animate-spin" /> : <Search className="size-4 text-muted-foreground" />}
                       </Button>
-                      {friendLookup ? (
-                        <div className="rounded-md border bg-muted/20 px-3 py-2 text-sm">
-                          {isSelfChallenge ? (
-                            walletStatus.primaryWallet ? (
-                              <p className="text-muted-foreground">
-                                Direct self-challenges are not supported. Use{' '}
-                                <strong>Anyone</strong> for an open wager.
-                              </p>
-                            ) : (
-                              <p>
-                                That&apos;s your email —{' '}
-                                <Link
-                                  to="/profile"
-                                  className="font-medium text-primary hover:underline"
-                                >
-                                  link your wallet on Profile
-                                </Link>{' '}
-                                before using friend challenges.
-                              </p>
-                            )
-                          ) : friendLookup.primary_wallet ? (
-                            <p className="text-muted-foreground">
-                              Friend found — only{' '}
-                              <span className="font-mono">
-                                {friendLookup.primary_wallet.slice(0, 4)}…
-                                {friendLookup.primary_wallet.slice(-4)}
-                              </span>{' '}
-                              can accept.
-                            </p>
-                          ) : (
-                            <p className="text-muted-foreground">
-                              They&apos;ll receive a challenge invite by email
-                              once you create this wager.
-                            </p>
-                          )}
-                        </div>
-                      ) : null}
-                    </>
-                  )}
-                </div>
-              ) : null}
-            </div>
-
-            <div className="space-y-2">
-              <div className="flex items-center justify-between gap-2">
-                <label htmlFor="challenge-stake" className="text-sm font-medium">
-                  Stake ({stablecoin})
-                </label>
-                {isWalletReady ? (
-                  <button
-                    type="button"
-                    className="text-xs font-medium text-primary underline-offset-4 hover:underline"
-                    onClick={() => setStakeInput(balanceUsdc.toString())}
-                  >
-                    Max {formatUsdc(balanceUsdc)}
-                  </button>
-                ) : null}
+                    </div>
+                    {errors.friendEmail && (
+                      <p className="text-xs text-destructive">{errors.friendEmail.message}</p>
+                    )}
+                    {friendLookup && (
+                      <div className="rounded-md bg-muted/30 px-3 py-2 text-sm text-muted-foreground">
+                        {isSelfChallenge ? (
+                          <p>Direct self-challenges aren&apos;t supported — use <strong>Anyone</strong>.</p>
+                        ) : friendLookup.primary_wallet ? (
+                          <p>
+                            Found — only{' '}
+                            <span className="font-mono text-foreground">
+                              {friendLookup.primary_wallet.slice(0, 4)}…{friendLookup.primary_wallet.slice(-4)}
+                            </span>{' '}
+                            can accept.
+                          </p>
+                        ) : (
+                          <p>They&apos;ll receive an invite by email once you create this wager.</p>
+                        )}
+                      </div>
+                    )}
+                  </>
+                )}
               </div>
-              <Input
-                id="challenge-stake"
-                type="number"
-                min="0"
-                step="0.000001"
-                inputMode="decimal"
-                placeholder="0.00"
-                value={stakeInput}
-                onChange={(e) => setStakeInput(e.target.value)}
-              />
-              {insufficientBalance ? (
-                <p className="text-sm text-destructive">
-                  Insufficient {stablecoin} balance.
-                </p>
-              ) : null}
-            </div>
+            )}
+          </div>
 
-            <div className="rounded-lg border border-dashed bg-muted/30 px-4 py-3 text-sm">
-              <div className="flex justify-between gap-4">
-                <span className="text-muted-foreground">You back</span>
-                <span className="font-medium">{sideLabel(side, match)}</span>
+          {/* Stake */}
+          <div className="space-y-2">
+            <div className="flex items-center justify-between">
+              <label htmlFor="challenge-stake" className="text-sm font-medium flex items-center gap-1.5">
+                <img src={usdtLogo} alt="USDT" className="size-4" />
+                Stake · {stablecoin}
+              </label>
+              {isWalletReady && (
+                <button
+                  type="button"
+                  className="text-xs text-primary underline-offset-4 hover:underline"
+                  onClick={() => setValue('stake', balanceUsdt.toString())}
+                >
+                  Max {formatUsdt(balanceUsdt)}
+                </button>
+              )}
+            </div>
+            <Input
+              id="challenge-stake"
+              type="number"
+              min="0"
+              inputMode="decimal"
+              placeholder="0.00"
+              {...register('stake')}
+            />
+            {errors.stake && (
+              <p className="text-xs text-destructive">{errors.stake.message}</p>
+            )}
+            {!errors.stake && insufficientBalance && (
+              <p className="text-xs text-destructive">Insufficient {stablecoin} balance.</p>
+            )}
+          </div>
+
+          {/* Summary */}
+          {stakeValid && !insufficientBalance && (
+            <div className="space-y-1 text-sm">
+              <div className="flex justify-between text-muted-foreground">
+                <span>You back</span>
+                <span className="font-medium text-foreground">{sideLabel(side, match)}</span>
               </div>
-              <div className="mt-2 flex justify-between gap-4">
-                <span className="text-muted-foreground">If you win</span>
-                <span className="tabular-nums font-semibold text-primary">
-                  {stakeValid ? `${formatUsdc(stakeUsdc * 2)} ${stablecoin}` : '—'}
+              <div className="flex justify-between text-muted-foreground">
+                <span>If you win</span>
+                <span className="font-semibold text-primary tabular-nums">
+                  <img src={usdtLogo} alt="" className="inline-block size-3.5 -mt-px mr-0.5" />
+                  {formatUsdt(stakeUsdt * 2)} {stablecoin}
                 </span>
               </div>
             </div>
-          </>
-        )}
-      </div>
-
-      <div className="mt-4 flex flex-col gap-2 sm:flex-row">
-        <Button
-          className="min-h-11 flex-1"
-          size="lg"
-          disabled={
-            !isWalletReady ||
-            walletNeedsLink ||
-            !stakeValid ||
-            insufficientBalance ||
-            !canChallenge ||
-            !friendReady ||
-            makeWager.isPending
-          }
-          onClick={handleOpenConfirm}
-        >
-          {makeWager.isPending ? (
-            <>
-              <Loader2 className="size-4 animate-spin" />
-              Creating…
-            </>
-          ) : (
-            <>
-              <Swords className="size-4" aria-hidden />
-              Create challenge
-            </>
           )}
-        </Button>
-      </div>
 
-
+          {/* CTA */}
+          <Button
+            type="submit"
+            className="w-full min-h-11"
+            size="lg"
+            disabled={
+              !isWalletReady ||
+              walletNeedsLink ||
+              !stakeValid ||
+              insufficientBalance ||
+              !canChallenge ||
+              !friendReady ||
+              makeWager.isPending
+            }
+          >
+            {makeWager.isPending ? (
+              <>
+                <Loader2 className="size-4 animate-spin" />
+                Creating…
+              </>
+            ) : (
+              <>
+                {/* <Swords className="size-4" aria-hidden /> */}
+                Create challenge
+              </>
+            )}
+          </Button>
+        </form>
+      )}
 
       <ConfirmTxDialog
         open={dialogOpen}
@@ -436,6 +447,8 @@ function ChallengeSlipBody({
     </>
   )
 }
+
+// ─── Dialog wrapper ───────────────────────────────────────────────────────────
 
 export function ChallengeSlipDialog({
   match,
@@ -453,7 +466,7 @@ export function ChallengeSlipDialog({
       {isDesktop ? (
         <SheetContent
           side="right"
-          className="w-full sm:max-w-[420px] overflow-y-auto px-4 sm:px-6"
+          className="w-full sm:max-w-[400px] overflow-y-auto px-5 sm:px-7"
         >
           <SheetHeader className="mb-6 text-left">
             <SheetTitle>Create challenge</SheetTitle>
@@ -461,7 +474,7 @@ export function ChallengeSlipDialog({
               Pick your outcome, set your stake, and post an open PvP wager.
             </SheetDescription>
           </SheetHeader>
-          <div className="pb-6 w-full max-w-full">
+          <div className="pb-8 w-full">
             <ChallengeSlipBody
               match={match}
               initialSide={initialSide}
@@ -473,29 +486,29 @@ export function ChallengeSlipDialog({
         <SheetContent
           side="bottom"
           showCloseButton={false}
-          className="max-h-[90dvh] overflow-y-auto rounded-t-2xl border-t px-4 pb-8 pt-6"
+          className="max-h-[90dvh] overflow-y-auto rounded-t-2xl border-t px-5 pb-10 pt-6"
         >
           <div className="mb-4 flex items-center justify-center">
             <div className="h-1.5 w-12 rounded-full bg-border" />
           </div>
-          <SheetHeader className="mb-4 text-left px-0">
+          <SheetHeader className="mb-6 text-left px-0">
             <SheetTitle>Create challenge</SheetTitle>
             <SheetDescription className="text-xs">
               Pick your outcome, set your stake, and post an open PvP wager.
             </SheetDescription>
           </SheetHeader>
-          <div className="w-full max-w-full">
-            <ChallengeSlipBody
-              match={match}
-              initialSide={initialSide}
-              onSuccess={() => onOpenChange(false)}
-            />
-          </div>
+          <ChallengeSlipBody
+            match={match}
+            initialSide={initialSide}
+            onSuccess={() => onOpenChange(false)}
+          />
         </SheetContent>
       )}
     </Sheet>
   )
 }
+
+// ─── Page wrapper ─────────────────────────────────────────────────────────────
 
 export function ChallengeSlipPage({
   matchId,
@@ -507,10 +520,7 @@ export function ChallengeSlipPage({
   const { data: matches, isLoading } = useMatchesQuery()
 
   const openMatches = useMemo(
-    () =>
-      (matches ?? []).filter(
-        (match) => classifyMatch(match) !== 'finished',
-      ),
+    () => (matches ?? []).filter((match) => classifyMatch(match) !== 'finished'),
     [matches],
   )
 
@@ -520,8 +530,7 @@ export function ChallengeSlipPage({
   }, [matchId])
 
   const selectedMatch =
-    openMatches.find((match) => match.match_id === selectedId) ??
-    openMatches[0]
+    openMatches.find((match) => match.match_id === selectedId) ?? openMatches[0]
 
   if (isLoading) {
     return (
@@ -537,23 +546,22 @@ export function ChallengeSlipPage({
       <div className="rounded-lg border border-dashed bg-muted/40 px-6 py-12 text-center">
         <p className="font-heading text-2xl">No open fixtures</p>
         <p className="mx-auto mt-2 max-w-sm text-sm text-muted-foreground">
-          Check back when upcoming or live matches are available on the schedule.
+          Check back when upcoming or live matches are available.
         </p>
       </div>
     )
   }
 
   return (
-    <div className="mx-auto max-w-lg space-y-5">
-      <div>
-        <h2 className="font-heading text-3xl sm:text-4xl">Create challenge</h2>
-        <p className="mt-2 text-sm text-muted-foreground">
-          Challenge another player on a 1-X-2 outcome. They take one of the
-          remaining sides at the same stake.
-        </p>
-      </div>
+    <div className="mx-auto max-w-lg space-y-6">
+      <PageHeader>
+        <PageHeaderHeading>Create challenge</PageHeaderHeading>
+        <PageHeaderDescription>
+          Challenge another player on a 1‑X‑2 outcome. They take one of the remaining sides at the same stake.
+        </PageHeaderDescription>
+      </PageHeader>
 
-      <div className="space-y-2">
+      <div className="space-y-1.5">
         <span className="text-sm font-medium">Choose a fixture</span>
         <FixturePicker
           matches={openMatches}
@@ -562,14 +570,14 @@ export function ChallengeSlipPage({
         />
       </div>
 
-      {selectedMatch ? (
-        <div className="rounded-xl border border-border bg-card p-5 shadow-sahara sm:p-7">
+      {selectedMatch && (
+        <div className="rounded-xl border border-border bg-card p-5 shadow-sahara sm:p-6">
           <ChallengeSlipBody
             match={selectedMatch}
             initialSide={initialSide}
           />
         </div>
-      ) : null}
+      )}
     </div>
   )
 }

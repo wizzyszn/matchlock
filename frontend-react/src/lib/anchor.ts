@@ -14,8 +14,8 @@ export function getProgramId(config: Pick<AppConfig, 'programId'>): PublicKey {
   return new PublicKey(config.programId)
 }
 
-export function getUsdcMint(config: Pick<AppConfig, 'usdcMint'>): PublicKey {
-  return new PublicKey(config.usdcMint)
+export function getUsdtMint(config: Pick<AppConfig, 'usdtMint'>): PublicKey {
+  return new PublicKey(config.usdtMint)
 }
 
 export function createAnchorProvider(

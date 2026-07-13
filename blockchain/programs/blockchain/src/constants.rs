@@ -12,6 +12,9 @@ pub const VAULT_SEED: &[u8] = b"vault";
 #[constant]
 pub const WALLET_PROFILE_SEED: &[u8] = b"wallet_profile";
 
+#[constant]
+pub const MATCH_STATE_SEED: &[u8] = b"match_state";
+
 pub const MAX_MATCH_ID_LEN: usize = 32;
 
 /// TxLINE devnet program ID (https://txline-docs.txodds.com/documentation/programs/addresses)

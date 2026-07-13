@@ -72,6 +72,14 @@ function findVaultPda(programId: PublicKey, wager: PublicKey): PublicKey {
   return pda
 }
 
+function findMatchStatePda(programId: PublicKey, matchId: string): PublicKey {
+  const [pda] = PublicKey.findProgramAddressSync(
+    [Buffer.from('match_state'), Buffer.from(matchId, 'utf8')],
+    programId,
+  )
+  return pda
+}
+
 export async function estimateTransactionFee(
   connection: Connection,
   wallet: AnchorWallet,
@@ -195,6 +203,7 @@ export async function buildMakeWagerTransaction({
   const matchBytes = Buffer.from(matchId, 'utf8')
   const config = findConfigPda(program.programId)
   const wager = findWagerPda(program.programId, maker, matchId, nonce)
+  const matchState = findMatchStatePda(program.programId, matchId)
   const vault = findVaultPda(program.programId, wager)
   const makerStablecoin = getAssociatedTokenAddressSync(stablecoinMint, maker)
 
@@ -218,6 +227,7 @@ export async function buildMakeWagerTransaction({
       maker,
       config,
       wager,
+      matchState,
       vault,
       makerStablecoin,
       stablecoinMint,
@@ -235,6 +245,7 @@ export type AcceptWagerParams = {
   wallet: AnchorWallet
   wagerPubkey: PublicKey
   maker: PublicKey
+  matchId: string
   takerSide: Side
   stablecoinMint: PublicKey
 }
@@ -244,12 +255,14 @@ export async function buildAcceptWagerTransaction({
   wallet,
   wagerPubkey,
   maker,
+  matchId,
   takerSide,
   stablecoinMint,
 }: AcceptWagerParams): Promise<Transaction> {
   const taker = wallet.publicKey
   const config = findConfigPda(program.programId)
   const vault = findVaultPda(program.programId, wagerPubkey)
+  const matchState = findMatchStatePda(program.programId, matchId)
   const takerStablecoin = getAssociatedTokenAddressSync(stablecoinMint, taker)
 
   const createAtaIx = createAssociatedTokenAccountIdempotentInstruction(
@@ -265,12 +278,14 @@ export async function buildAcceptWagerTransaction({
       taker,
       config,
       wager: wagerPubkey,
+      matchState,
       maker,
       takerStablecoin,
       vault,
       stablecoinMint,
       tokenProgram: TOKEN_PROGRAM_ID,
       associatedTokenProgram: ASSOCIATED_TOKEN_PROGRAM_ID,
+      systemProgram: SystemProgram.programId,
     })
     .instruction()
 

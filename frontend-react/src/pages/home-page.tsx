@@ -11,7 +11,7 @@ const NAV_LINKS = [
 const WORKFLOW_STEPS = [
   { step: '01', title: 'Pick a match', description: 'Browse live World Cup fixtures with real-time status and market availability.' },
   { step: '02', title: 'Challenge or accept', description: 'Create a wager on your side, or take the opposite side of an open challenge.' },
-  { step: '03', title: 'Stakes lock on-chain', description: 'USDC moves securely to a program-controlled vault PDA.' },
+  { step: '03', title: 'Stakes lock on-chain', description: 'USDT moves securely to a program-controlled vault PDA.' },
   { step: '04', title: 'Settle automatically', description: 'When the match ends, TxLINE proves the result for 2x payout.' },
 ]
 
@@ -112,7 +112,7 @@ export function HomePage() {
 
             <div className="text-center">
               <div className="bg-white/70 text-black font-bold text-5xl px-10 py-4 rounded-2xl mb-4">VS</div>
-              <div className="text-[#e64d40] font-medium">Open &bull; 1,250.00 USDC</div>
+              <div className="text-[#e64d40] font-medium">Open &bull; 1,250.00 USDT</div>
             </div>
 
             <div className="text-center">

@@ -42,6 +42,16 @@ pub struct Config {
 
 #[account]
 #[derive(InitSpace)]
+pub struct MatchState {
+    pub match_id: [u8; 32],
+    pub match_id_len: u8,
+    pub is_closed: bool,
+    pub closed_at: i64,
+    pub bump: u8,
+}
+
+#[account]
+#[derive(InitSpace)]
 pub struct Wager {
     pub maker: Pubkey,
     /// When set (not default), only this pubkey may accept the open wager.
@@ -63,6 +73,12 @@ pub struct Wager {
 }
 
 impl Wager {
+    pub fn match_id_bytes(&self) -> &[u8] {
+        &self.match_id[..self.match_id_len as usize]
+    }
+}
+
+impl MatchState {
     pub fn match_id_bytes(&self) -> &[u8] {
         &self.match_id[..self.match_id_len as usize]
     }

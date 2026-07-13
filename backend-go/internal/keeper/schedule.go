@@ -103,9 +103,6 @@ func (w *ScheduleWorker) syncOnce(ctx context.Context) error {
 				Away: odds.Away,
 			})
 		}
-
-		match = cache.InferFinalState(match, now)
-
 		if err := w.Cache.UpsertMatch(ctx, match); err != nil {
 			return fmt.Errorf("upsert scheduled match %s: %w", fixture.MatchID(), err)
 		}

@@ -36,6 +36,7 @@ fn unregistered_wallet_cannot_make_wager() {
             maker,
             config: env.config,
             wager,
+            match_state: env.match_state_pda(&env.match_id),
             vault,
             maker_stablecoin: maker_ata,
             stablecoin_mint: env.mint,
@@ -94,6 +95,7 @@ fn unregistered_wallet_cannot_accept_wager() {
             taker: stranger.pubkey(),
             config: env.config,
             wager,
+            match_state: env.match_state_pda(&env.match_id),
             maker: env.maker.pubkey(),
             taker_stablecoin: stranger_ata,
             vault,
@@ -101,6 +103,7 @@ fn unregistered_wallet_cannot_accept_wager() {
             taker_wallet_profile: env.wallet_profile_pda(&stranger.pubkey()),
             token_program: TOKEN_PROGRAM_ID,
             associated_token_program: ATA_PROGRAM_ID,
+            system_program: solana_system_interface::program::ID,
         }
         .to_account_metas(None),
     );
@@ -146,6 +149,7 @@ fn accept_own_wager_fails() {
             taker: maker,
             config: env.config,
             wager,
+            match_state: env.match_state_pda(&env.match_id),
             maker,
             taker_stablecoin: maker_ata,
             vault,
@@ -153,6 +157,7 @@ fn accept_own_wager_fails() {
             taker_wallet_profile: env.wallet_profile_pda(&maker),
             token_program: TOKEN_PROGRAM_ID,
             associated_token_program: ATA_PROGRAM_ID,
+            system_program: solana_system_interface::program::ID,
         }
         .to_account_metas(None),
     );
@@ -216,6 +221,83 @@ fn settle_wager_pays_winner() {
     assert_eq!(env.token_balance(&maker_ata), maker_before + stake * 2);
     assert!(env.svm.get_account(&wager).is_none());
     assert!(env.svm.get_account(&vault).is_none());
+}
+
+#[test]
+fn closed_match_cannot_make_or_accept_wager() {
+    let mut env = TestEnv::new();
+    env.make_wager(100_000, Side::Home);
+    env.close_match();
+
+    let maker = env.maker.pubkey();
+    let maker_ata = get_associated_token_address(&maker, &env.mint);
+    let (wager2, vault2) = env.wager_pdas(&maker, &env.match_id, 2);
+    let ix = Instruction::new_with_bytes(
+        blockchain::id(),
+        &blockchain::instruction::MakeWager {
+            match_id: env.match_id.clone(),
+            stake_amount: 100_000,
+            maker_side: Side::Home,
+            invited_taker: solana_address::Address::default(),
+            participant1_is_home: true,
+            nonce: 2,
+        }
+        .data(),
+        blockchain::accounts::MakeWager {
+            maker,
+            config: env.config,
+            wager: wager2,
+            match_state: env.match_state_pda(&env.match_id),
+            vault: vault2,
+            maker_stablecoin: maker_ata,
+            stablecoin_mint: env.mint,
+            maker_wallet_profile: env.wallet_profile_pda(&maker),
+            token_program: TOKEN_PROGRAM_ID,
+            associated_token_program: ATA_PROGRAM_ID,
+            system_program: solana_system_interface::program::ID,
+        }
+        .to_account_metas(None),
+    );
+    let tx = Transaction::new_signed_with_payer(
+        &[ix],
+        Some(&maker),
+        &[&env.maker],
+        env.svm.latest_blockhash(),
+    );
+    assert!(env.svm.send_transaction(tx).is_err());
+
+    let (wager, vault) = env.wager_pdas(&maker, &env.match_id, 1);
+    let taker = env.taker.pubkey();
+    let taker_ata = get_associated_token_address(&taker, &env.mint);
+    let ix = Instruction::new_with_bytes(
+        blockchain::id(),
+        &blockchain::instruction::AcceptWager {
+            taker_side: Side::Away,
+        }
+        .data(),
+        blockchain::accounts::AcceptWager {
+            taker,
+            config: env.config,
+            wager,
+            match_state: env.match_state_pda(&env.match_id),
+            maker,
+            taker_stablecoin: taker_ata,
+            vault,
+            stablecoin_mint: env.mint,
+            taker_wallet_profile: env.wallet_profile_pda(&taker),
+            token_program: TOKEN_PROGRAM_ID,
+            associated_token_program: ATA_PROGRAM_ID,
+            system_program: solana_system_interface::program::ID,
+        }
+        .to_account_metas(None),
+    );
+    let tx = Transaction::new_signed_with_payer(
+        &[ix],
+        Some(&taker),
+        &[&env.taker],
+        env.svm.latest_blockhash(),
+    );
+    assert!(env.svm.send_transaction(tx).is_err());
 }
 
 #[test]
@@ -396,6 +478,7 @@ fn accept_same_side_as_maker_fails() {
             taker,
             config: env.config,
             wager,
+            match_state: env.match_state_pda(&env.match_id),
             maker,
             taker_stablecoin: taker_ata,
             vault,
@@ -403,6 +486,7 @@ fn accept_same_side_as_maker_fails() {
             taker_wallet_profile: env.wallet_profile_pda(&taker),
             token_program: TOKEN_PROGRAM_ID,
             associated_token_program: ATA_PROGRAM_ID,
+            system_program: solana_system_interface::program::ID,
         }
         .to_account_metas(None),
     );
@@ -446,6 +530,7 @@ fn wrong_wallet_cannot_accept_invited_wager() {
             taker: stranger.pubkey(),
             config: env.config,
             wager,
+            match_state: env.match_state_pda(&env.match_id),
             maker: env.maker.pubkey(),
             taker_stablecoin: stranger_ata,
             vault,
@@ -453,6 +538,7 @@ fn wrong_wallet_cannot_accept_invited_wager() {
             taker_wallet_profile: env.wallet_profile_pda(&stranger.pubkey()),
             token_program: TOKEN_PROGRAM_ID,
             associated_token_program: ATA_PROGRAM_ID,
+            system_program: solana_system_interface::program::ID,
         }
         .to_account_metas(None),
     );

@@ -28,6 +28,7 @@ const ERROR_MESSAGES: Record<string, string> = {
   InvalidStatus: 'This wager is no longer in the right state — it may have been accepted or cancelled.',
   InvalidMatchId: 'Invalid match ID.',
   InvalidStake: 'Stake must be greater than zero.',
+  MatchClosed: 'This match is already closed for wagering.',
   CannotAcceptOwnWager: 'You cannot accept your own wager.',
   InvalidTakerSide: 'Pick a different outcome than the maker.',
   WagerNotOpen: 'This wager is no longer open.',

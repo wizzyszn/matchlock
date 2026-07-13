@@ -34,6 +34,11 @@ const AuthVerifyPage = lazy(() =>
 const InvitesPage = lazy(() =>
   import("@/pages/invites-page").then((m) => ({ default: m.InvitesPage })),
 );
+const InviteDetailPage = lazy(() =>
+  import("@/pages/invite-detail-page").then((m) => ({
+    default: m.InviteDetailPage,
+  })),
+);
 const WagerDetailPage = lazy(() =>
   import("@/pages/wager-detail-page").then((m) => ({
     default: m.WagerDetailPage,
@@ -51,13 +56,13 @@ const TermsPage = lazy(() =>
 );
 
 const LeaderboardPage = lazy(() =>
-  import("@/pages/leaderboard-page").then((m) => ({ default: m.LeaderboardPage })),
+  import("@/pages/leaderboard-page").then((m) => ({
+    default: m.LeaderboardPage,
+  })),
 );
 
 function PageLoader() {
-  return (
-    <AuthTransitionLoader title="Loading" subtitle="Fetching page data…" />
-  );
+  return <AuthTransitionLoader />;
 }
 
 function withSuspense(Page: ComponentType) {
@@ -100,7 +105,6 @@ export const router = createBrowserRouter([
         children: [
           { index: true, element: <Navigate to="/markets" replace /> },
           { path: "markets", element: withSuspense(MarketsPage) },
-        
 
           { path: "open", element: withSuspense(OpenWagersPage) },
           { path: "my-wagers", element: withSuspense(MyWagersPage) },
@@ -110,7 +114,7 @@ export const router = createBrowserRouter([
           },
           { path: "history", element: withSuspense(HistoryPage) },
           { path: "invites", element: withSuspense(InvitesPage) },
-          { path: "invites/:id", element: withSuspense(InvitesPage) },
+          { path: "invites/:id", element: withSuspense(InviteDetailPage) },
           { path: "leaderboard", element: withSuspense(LeaderboardPage) },
           { path: "profile", element: withSuspense(ProfilePage) },
           { path: "*", element: <Navigate to="/markets" replace /> },

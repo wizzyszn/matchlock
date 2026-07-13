@@ -24,6 +24,7 @@ type TxlineClient interface {
 type SolanaClient interface {
 	ListMatchedWagers(ctx context.Context, matchID string) ([]chainsol.Wager, error)
 	GetWager(ctx context.Context, pubkey solanago.PublicKey) (chainsol.Wager, error)
+	CloseMatch(ctx context.Context, keeperKey solanago.PrivateKey, matchID string) (solanago.Signature, error)
 	SettleWager(ctx context.Context, p chainsol.SettleParams) (solanago.Signature, error)
 }
 
@@ -64,7 +65,6 @@ func (w *Worker) HandleUpdate(ctx context.Context, update txline.ScoreUpdate) er
 		return fmt.Errorf("load cached match: %w", err)
 	}
 	match := cache.ApplyScoreUpdate(existing, update)
-	match = cache.InferFinalState(match, time.Now().UTC())
 	if err := w.Cache.UpsertMatch(ctx, match); err != nil {
 		return fmt.Errorf("cache match: %w", err)
 	}
@@ -73,6 +73,9 @@ func (w *Worker) HandleUpdate(ctx context.Context, update txline.ScoreUpdate) er
 	}
 	if !update.IsFinal() {
 		return nil
+	}
+	if err := w.closeMatchOnChain(ctx, update.MatchID()); err != nil {
+		slog.Error("close match on-chain failed", "match_id", update.MatchID(), "err", err)
 	}
 	if !w.AutoSettle {
 		slog.Info("match final; winner claim required (keeper auto-settle disabled)",
@@ -144,6 +147,18 @@ func (w *Worker) SettleMatch(ctx context.Context, update txline.ScoreUpdate) err
 			w.enqueuePendingSettlement(ctx, update, wager, err)
 		}
 	}
+	return nil
+}
+
+func (w *Worker) closeMatchOnChain(ctx context.Context, matchID string) error {
+	if w.Solana == nil || len(w.KeeperKey) == 0 {
+		return nil
+	}
+	sig, err := w.Solana.CloseMatch(ctx, w.KeeperKey, matchID)
+	if err != nil {
+		return err
+	}
+	slog.Info("match closed for wagering on-chain", "match_id", matchID, "tx_sig", sig.String())
 	return nil
 }
 

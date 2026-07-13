@@ -58,8 +58,8 @@ func TestScheduleWorkerSyncOnce(t *testing.T) {
 					SeqAlt:             850,
 					Participant1Home:   true,
 					Score: &txline.SnapshotScore{
-						Participant1: txline.SnapshotTotal{Total: txline.SnapshotGoals{Goals: 2}},
-						Participant2: txline.SnapshotTotal{Total: txline.SnapshotGoals{Goals: 0}},
+						Participant1: txline.SoccerTotalScore{Total: &txline.SoccerScore{Goals: 2}},
+						Participant2: txline.SoccerTotalScore{Total: &txline.SoccerScore{Goals: 0}},
 					},
 				}},
 			},

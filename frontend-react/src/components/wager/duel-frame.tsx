@@ -83,7 +83,7 @@ export function DuelFrame({
       {(league || isLive) && (
         <div
           className={cn(
-            'flex items-center gap-2 text-xs text-muted-foreground',
+            'flex items-center justify-center gap-2 text-xs text-muted-foreground',
             isInline ? 'mb-2' : 'mb-3 justify-center',
           )}
         >

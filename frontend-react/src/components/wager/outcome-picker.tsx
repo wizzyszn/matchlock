@@ -1,21 +1,21 @@
-import { Check } from 'lucide-react'
+import { Check } from "lucide-react";
 
-import { TeamFlag } from '@/components/wager/team-flag'
-import type { Match, Side } from '@/lib/api'
-import { formatOdds, matchLabels } from '@/lib/match-display'
-import { referenceOddsForSide, sideShortLabel } from '@/lib/wager-sides'
-import { cn } from '@/lib/utils'
+import { TeamFlag } from "@/components/wager/team-flag";
+import type { Match, Side } from "@/lib/api";
+import { formatOdds, matchLabels } from "@/lib/match-display";
+import { referenceOddsForSide, sideShortLabel } from "@/lib/wager-sides";
+import { cn } from "@/lib/utils";
 
-export type OutcomeDensity = 'default' | 'compact'
+export type OutcomeDensity = "default" | "compact";
 
 export type OutcomeOptionProps = {
-  side: Side
-  match?: Match
-  selected: boolean
-  onSelect: () => void
-  showOdds?: boolean
-  density?: OutcomeDensity
-}
+  side: Side;
+  match?: Match;
+  selected: boolean;
+  onSelect: () => void;
+  showOdds?: boolean;
+  density?: OutcomeDensity;
+};
 
 export function OutcomeOption({
   side,
@@ -23,23 +23,24 @@ export function OutcomeOption({
   selected,
   onSelect,
   showOdds = true,
-  density = 'default',
+  density = "default",
 }: OutcomeOptionProps) {
-  const compact = density === 'compact'
-  const labels = match ? matchLabels(match) : null
-  const odds = match && showOdds ? referenceOddsForSide(side, match.odds) : null
-  const isDraw = side === 'draw'
+  const compact = density === "compact";
+  const labels = match ? matchLabels(match) : null;
+  const odds =
+    match && showOdds ? referenceOddsForSide(side, match.odds) : null;
+  const isDraw = side === "draw";
   const displayName = match
-    ? side === 'home'
+    ? side === "home"
       ? labels!.homeTeam
-      : side === 'away'
+      : side === "away"
         ? labels!.awayTeam
-        : 'Draw'
-    : side === 'draw'
-      ? 'Draw'
-      : side === 'home'
-        ? 'Home'
-        : 'Away'
+        : "Draw"
+    : side === "draw"
+      ? "Draw"
+      : side === "home"
+        ? "Home"
+        : "Away";
 
   return (
     <button
@@ -48,30 +49,35 @@ export function OutcomeOption({
       aria-checked={selected}
       onClick={onSelect}
       className={cn(
-        'flex w-full items-center text-left transition-colors',
-        'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring',
+        "group flex w-full items-center text-left transition-all",
+        "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-1 focus-visible:ring-ring",
         compact
-          ? 'min-h-11 gap-2 rounded-md border px-2.5 py-1.5'
-          : 'min-h-14 gap-3 rounded-lg border px-3 py-2.5',
+          ? "min-h-12 gap-2.5 rounded-lg border px-3 py-2"
+          : "min-h-15 gap-3.5 rounded-xl border px-4 py-3",
         selected
-          ? 'border-primary bg-primary/8 shadow-sm'
-          : 'border-border bg-background hover:border-primary/35 hover:bg-muted/40',
+          ? "border-primary bg-primary/5 shadow-sm ring-1 ring-primary/20"
+          : "border-border bg-card hover:border-primary/40 hover:bg-muted/30",
       )}
     >
+      {/* 1 / X / 2 Label */}
       <span
         className={cn(
-          'flex shrink-0 items-center justify-center rounded-md border border-border bg-muted/50 font-bold tracking-widest text-muted-foreground uppercase',
-          compact ? 'size-6 text-[10px]' : 'size-8 text-[11px]',
+          "flex shrink-0 items-center justify-center rounded bg-muted/60 font-bold tracking-widest text-muted-foreground transition-colors group-hover:bg-muted group-hover:text-foreground",
+          selected
+            ? "bg-primary/20 text-primary group-hover:bg-primary/20 group-hover:text-primary"
+            : "",
+          compact ? "size-6 text-[10px]" : "size-7 text-[11px]",
         )}
       >
         {sideShortLabel(side)}
       </span>
 
+      {/* Identity (Flag or Draw icon) */}
       {isDraw ? (
         <span
           className={cn(
-            'flex shrink-0 items-center justify-center rounded-full border border-dashed border-muted-foreground/50 font-bold text-muted-foreground',
-            compact ? 'size-6 text-[10px]' : 'size-8 text-xs',
+            "flex shrink-0 items-center justify-center font-bold text-muted-foreground/40",
+            compact ? "size-5 text-sm" : "size-6 text-base",
           )}
           aria-hidden
         >
@@ -80,109 +86,119 @@ export function OutcomeOption({
       ) : match ? (
         <TeamFlag
           name={displayName}
-          size={compact ? 'sm' : 'md'}
-          className="shrink-0"
+          size={compact ? "sm" : "md"}
+          className={cn(
+            "shrink-0 shadow-sm transition-transform group-hover:scale-105",
+            compact ? "p-0.5" : "",
+          )}
         />
       ) : (
         <span
           className={cn(
-            'flex shrink-0 items-center justify-center rounded-full border border-border bg-muted font-semibold text-muted-foreground',
-            compact ? 'size-6 text-[10px]' : 'size-8 text-xs',
+            "flex shrink-0 items-center justify-center rounded-full border border-border bg-muted font-semibold text-muted-foreground",
+            compact ? "size-5 text-[10px]" : "size-6 text-xs",
           )}
           aria-hidden
-        >
-          {sideShortLabel(side)}
-        </span>
+        />
       )}
 
-      <div className="min-w-0 flex-1">
+      {/* Name */}
+      <div className="min-w-0 flex-1 ml-1.5">
         <p
           className={cn(
-            'truncate text-foreground',
-            compact
-              ? 'text-sm font-medium'
-              : isDraw
-                ? 'font-medium'
-                : 'font-heading text-base leading-tight',
+            "truncate text-foreground transition-colors",
+            selected ? "font-semibold" : "font-medium",
+            compact ? "text-sm" : "text-base",
           )}
         >
           {displayName}
         </p>
-        {!compact ? (
-          <p className="mt-0.5 text-xs text-muted-foreground">
-            {isDraw
-              ? 'Neither side wins in regular time'
-              : `You win if ${displayName} takes the match`}
-          </p>
-        ) : null}
       </div>
 
-      <div
-        className={cn(
-          'flex shrink-0 items-center',
-          compact ? 'gap-2' : 'flex-col items-end justify-center gap-1 self-stretch py-0.5',
-        )}
-      >
+      {/* Odds & Check */}
+      <div className="flex shrink-0 items-center gap-3">
         {showOdds && match ? (
           odds != null ? (
             <span
               className={cn(
-                'tabular-nums font-semibold text-foreground',
-                compact ? 'text-xs' : 'text-sm',
+                "tabular-nums transition-colors",
+                selected
+                  ? "font-bold text-primary text-base"
+                  : "font-semibold text-muted-foreground",
+                compact && !selected ? "text-sm" : "",
               )}
             >
               {formatOdds(odds)}
             </span>
           ) : (
-            <span className={compact ? 'text-xs text-muted-foreground' : 'text-sm text-muted-foreground'}>
+            <span
+              className={
+                compact
+                  ? "text-xs text-muted-foreground"
+                  : "text-sm text-muted-foreground"
+              }
+            >
               —
             </span>
           )
         ) : null}
-        {selected ? (
-          <Check className={compact ? 'size-3.5 text-primary' : 'size-4 text-primary'} aria-hidden />
-        ) : compact ? null : (
-          <span className="size-4" aria-hidden />
-        )}
+
+        {/* Subtle selected indicator */}
+        <div
+          className={cn(
+            "flex size-5 items-center justify-center rounded-full transition-colors",
+            selected ? "bg-primary text-primary-foreground" : "bg-transparent",
+          )}
+        >
+          {selected && <Check className="size-3.5 stroke-3" aria-hidden />}
+        </div>
       </div>
     </button>
-  )
+  );
 }
 
 export type OutcomePickerProps = {
-  match?: Match
-  sides: Side[]
-  selected: Side
-  onSelect: (side: Side) => void
-  label?: string
-  hint?: string
-  showOdds?: boolean
-  density?: OutcomeDensity
-  className?: string
-}
+  match?: Match;
+  sides: Side[];
+  selected: Side;
+  onSelect: (side: Side) => void;
+  label?: string;
+  hint?: string;
+  showOdds?: boolean;
+  density?: OutcomeDensity;
+  className?: string;
+};
 
 export function OutcomePicker({
   match,
   sides,
   selected,
   onSelect,
-  label = 'Pick your outcome',
+  label = "Pick your outcome",
   hint,
   showOdds = true,
-  density = 'default',
+  density = "default",
   className,
 }: OutcomePickerProps) {
-  const compact = density === 'compact'
+  const compact = density === "compact";
 
   return (
-    <div className={cn(compact ? 'space-y-1.5' : 'space-y-2', className)}>
-      <span className={cn('font-medium', compact ? 'text-xs text-muted-foreground' : 'text-sm')}>
+    <div className={cn(compact ? "space-y-2" : "space-y-2", className)}>
+      <div
+        className={cn(
+          "font-medium",
+          compact ? "text-xs text-muted-foreground" : "text-sm",
+        )}
+      >
         {label}
-      </span>
+        {hint ? (
+          <p className="text-xs text-muted-foreground pt-1">{hint}</p>
+        ) : null}
+      </div>
       <div
         role="radiogroup"
         aria-label={label}
-        className={cn(compact ? 'space-y-1.5' : 'space-y-2')}
+        className={cn(compact ? "space-y-2" : "space-y-3")}
       >
         {sides.map((side) => (
           <OutcomeOption
@@ -196,9 +212,6 @@ export function OutcomePicker({
           />
         ))}
       </div>
-      {hint ? (
-        <p className="text-xs text-muted-foreground">{hint}</p>
-      ) : null}
     </div>
-  )
+  );
 }

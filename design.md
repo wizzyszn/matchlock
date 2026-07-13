@@ -26,7 +26,7 @@ All colors are verified from the compiled HTML/CSS of the landing page.
 | Primary | `#e64040` | Active nav link, step numbers, highlighted headings, CTA gradient start, accent bar start |
 | Primary-light | `#e64e40` | Accent bar end |
 | CTA highlight | `#e66140` | Button gradient end, team badge border tint |
-| Match status | `#e64d40` | "Open • 1,250.00 USDC" text |
+| Match status | `#e64d40` | "Open • 1,250.00 USDT" text |
 
 ### Semantic
 

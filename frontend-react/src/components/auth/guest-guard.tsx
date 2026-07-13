@@ -9,7 +9,6 @@ export function GuestGuard() {
   if (isLoading) {
     return (
       <AuthTransitionLoader
-        title="Loading"
         subtitle="Preparing sign-in…"
       />
     )

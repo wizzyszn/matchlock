@@ -18,6 +18,7 @@ import { useAuthMutations } from '@/hooks/mutations/use-auth-mutations'
 import { ApiClientError } from '@/lib/api'
 import MatchLockLogo from '@/components/brand/matchlock-logo'
 import { PoweredByTxLine } from '@/components/brand/powered-by-txline'
+import { PageHeader, PageHeaderHeading, PageHeaderDescription } from '@/components/ui/page-header'
 
 const REDIRECT_KEY = 'post_auth_redirect'
 
@@ -57,14 +58,12 @@ export function LoginPage() {
       {/* Brand + headline */}
       <div className="space-y-4 text-center">
         <MatchLockLogo />
-        <div className="space-y-2">
-          <h1 className="font-heading text-3xl tracking-tight sm:text-4xl">
-            Welcome back
-          </h1>
-          <p className="mx-auto max-w-xs text-sm text-muted-foreground">
-            Peer-to-peer wagers on Solana-
-          </p>
-        </div>
+        <PageHeader className="mb-0 space-y-2">
+          <PageHeaderHeading>Welcome back</PageHeaderHeading>
+          <PageHeaderDescription className="mx-auto max-w-xs text-center">
+            Peer-to-peer wagers on Solana
+          </PageHeaderDescription>
+        </PageHeader>
       </div>
 
       <Card className="border-border/80 shadow-sahara">
@@ -103,7 +102,7 @@ export function LoginPage() {
           ) : (
             /* ── Form state ── */
             <form onSubmit={handleSubmit(onSubmit)} className="space-y-5" noValidate>
-              <div className="space-y-1.5">
+              <div className="space-y-1.5 flex flex-col gap-1">
                 <label htmlFor="email" className="text-sm font-medium">
                   Email address
                 </label>
@@ -144,7 +143,7 @@ export function LoginPage() {
 
               <Button
                 type="submit"
-                className="w-full min-h-11"
+                className="w-full min-h-11 rounded-[100px] cursor-pointer"
                 disabled={isSubmitting || requestMagicLink.isPending}
               >
                 {requestMagicLink.isPending || isSubmitting ? (

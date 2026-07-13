@@ -25,7 +25,6 @@ const LIVE_STATES = new Set([
   'ht',
   'ht2',
   'htet',
-  'extratime',
   'penalties',
   'i',
   'i2',
@@ -51,11 +50,65 @@ const FINAL_STATES = new Set([
   'a',
   'a1',
   'a2',
+  'extratime',
+  'aet',
 ])
 
 const UPCOMING_GRACE_MS = 5 * 60 * 1000
-// Align with backend cache.InferFinalState (105 minutes).
-const MATCH_DURATION_MS = 105 * 60 * 1000
+
+const STATUS_SHORT_MAP: Record<string, string> = {
+  scheduled: '—',
+  ns: '—',
+  ns2: '—',
+  ht: 'HT',
+  ht2: 'HT',
+  halftime: 'HT',
+  htet: 'AET',
+  extratime: 'AET',
+  et1: 'AET',
+  et2: 'AET',
+  penalties: 'PEN',
+  pe: 'PEN',
+  p: 'PEN',
+  inprogress: 'LIVE',
+  in_progress: 'LIVE',
+  live: 'LIVE',
+  i: 'LIVE',
+  i2: 'LIVE',
+  h1: '1H',
+  h2: '2H',
+  h11: '1H',
+  h21: '2H',
+}
+
+const STATUS_LABEL_MAP: Record<string, string> = {
+  scheduled: 'Scheduled',
+  ns: 'Scheduled',
+  ns2: 'Scheduled',
+  ht: 'Half-time',
+  ht2: 'Half-time',
+  halftime: 'Half-time',
+  htet: 'Extra-time break',
+  extratime: 'After extra time',
+  et1: 'Extra time',
+  et2: 'Extra time',
+  penalties: 'Penalties',
+  pe: 'Penalties',
+  p: 'Penalties',
+  inprogress: 'In progress',
+  in_progress: 'In progress',
+  live: 'Live',
+  i: 'In progress',
+  i2: 'In progress',
+  h1: 'First half',
+  h2: 'Second half',
+  h11: 'First half',
+  h21: 'Second half',
+}
+
+function normalizedStatus(match: Match): string {
+  return match.status.toLowerCase().trim()
+}
 
 export function matchScores(match: Match): MatchScores {
   const hasScore =
@@ -80,28 +133,19 @@ export function hasKickoffPassed(match: Match, now = Date.now()): boolean {
   return kickoff > 0 && kickoff <= now
 }
 
-export function isMatchFinished(match: Match, now = Date.now()): boolean {
+export function isMatchFinished(match: Match): boolean {
   if (match.is_final) return true
 
-  const status = match.status.toLowerCase().trim()
+  const status = normalizedStatus(match)
   if (FINAL_STATES.has(status)) return true
-
-  const kickoff = kickoffMs(match)
-  if (
-    kickoff > 0 &&
-    kickoff <= now &&
-    now - kickoff >= MATCH_DURATION_MS
-  ) {
-    return true
-  }
 
   return false
 }
 
 export function classifyMatch(match: Match, now = Date.now()): MatchFilter {
-  if (isMatchFinished(match, now)) return 'finished'
+  if (isMatchFinished(match)) return 'finished'
 
-  const status = match.status.toLowerCase().trim()
+  const status = normalizedStatus(match)
   const scores = matchScores(match)
   const kickoff = kickoffMs(match)
   const kickoffPassed = kickoff > 0 && kickoff <= now
@@ -201,22 +245,37 @@ export function formatKickoffClock(match: Match): string {
 }
 
 export function formatStatusShort(match: Match): string {
-  if (isMatchFinished(match)) return 'FT'
-
-  const status = match.status.toLowerCase()
-  if (!hasKickoffPassed(match) && (status === 'scheduled' || status === 'ns2')) {
-    return '—'
+  const status = normalizedStatus(match)
+  if (isMatchFinished(match)) {
+    if (status === 'extratime' || status === 'fet' || status === 'aet') return 'AET'
+    if (status === 'fpe' || status === 'penalties') return 'PEN'
+    return 'FT'
   }
-  if (status === 'ht' || status === 'ht2') return 'HT'
-  if (LIVE_STATES.has(status)) return status.toUpperCase().slice(0, 3)
+
+  if ((status === 'scheduled' || status === 'ns' || status === 'ns2') && hasKickoffPassed(match)) {
+    return classifyMatch(match) === 'live' ? 'LIVE' : '—'
+  }
+  const mapped = STATUS_SHORT_MAP[status]
+  if (mapped) return mapped
   if (hasKickoffPassed(match) && classifyMatch(match) === 'live') return 'LIVE'
 
   return '—'
 }
 
 export function formatMatchStatus(match: Match): string {
-  if (isMatchFinished(match)) return 'Final'
-  if (match.status.toLowerCase() === 'scheduled') return 'Scheduled'
+  const status = normalizedStatus(match)
+  if (isMatchFinished(match)) {
+    if (status === 'extratime' || status === 'fet' || status === 'aet') return 'Final AET'
+    if (status === 'fpe' || status === 'penalties') return 'Final PEN'
+    return 'Final'
+  }
+  
+  if ((status === 'scheduled' || status === 'ns' || status === 'ns2') && hasKickoffPassed(match)) {
+    return classifyMatch(match) === 'live' ? 'Live' : 'Scheduled'
+  }
+  const mapped = STATUS_LABEL_MAP[status]
+  if (mapped) return mapped
+  if (status === 'scheduled') return 'Scheduled'
   return match.status.replace(/_/g, ' ')
 }
 

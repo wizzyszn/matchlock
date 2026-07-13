@@ -7,6 +7,7 @@ import (
 	"io"
 	"net/http"
 	"strconv"
+	"strings"
 )
 
 // FetchScoreSnapshot returns the latest score rows for a fixture.
@@ -48,21 +49,14 @@ type ScoreSnapshotRow struct {
 	SeqAlt             int32  `json:"Seq"`
 	Participant1IsHome bool   `json:"participant1IsHome"`
 	Participant1Home   bool   `json:"Participant1IsHome"`
+	Clock              *SoccerFixtureClock `json:"Clock"`
 	ScoreSoccer        *SoccerFixtureScore `json:"scoreSoccer"`
 	Score              *SnapshotScore `json:"Score"`
 }
 
 type SnapshotScore struct {
-	Participant1 SnapshotTotal `json:"Participant1"`
-	Participant2 SnapshotTotal `json:"Participant2"`
-}
-
-type SnapshotTotal struct {
-	Total SnapshotGoals `json:"Total"`
-}
-
-type SnapshotGoals struct {
-	Goals int32 `json:"Goals"`
+	Participant1 SoccerTotalScore `json:"Participant1"`
+	Participant2 SoccerTotalScore `json:"Participant2"`
 }
 
 func (r ScoreSnapshotRow) Fixture() int64 {
@@ -103,20 +97,76 @@ func (r ScoreSnapshotRow) ToScoreUpdate() (ScoreUpdate, error) {
 	}
 	if r.ScoreSoccer != nil {
 		update.ScoreSoccer = r.ScoreSoccer
+		update.GameState = r.normalizedState(update.GameState)
 		return update, nil
 	}
 	if r.Score != nil {
 		update.ScoreSoccer = &SoccerFixtureScore{
-			Participant1: SoccerTotalScore{Goals: snapshotGoals(r.Score.Participant1)},
-			Participant2: SoccerTotalScore{Goals: snapshotGoals(r.Score.Participant2)},
+			Participant1: r.Score.Participant1,
+			Participant2: r.Score.Participant2,
 		}
+		update.GameState = r.normalizedState(update.GameState)
 		return update, nil
 	}
 	return ScoreUpdate{}, fmt.Errorf("snapshot missing score data")
 }
 
-func snapshotGoals(participant SnapshotTotal) int32 {
-	return participant.Total.Goals
+func (r ScoreSnapshotRow) normalizedState(state string) string {
+	normalized := strings.ToLower(strings.TrimSpace(state))
+	if normalized != "" && normalized != "scheduled" && normalized != "ns" && normalized != "ns2" {
+		return state
+	}
+
+	score := r.score()
+	if score != nil {
+		if hasPenaltyPeriod(score.Participant1) || hasPenaltyPeriod(score.Participant2) {
+			return "penalties"
+		}
+		if hasExtraTimePeriod(score.Participant1) || hasExtraTimePeriod(score.Participant2) {
+			if r.Clock != nil && !r.Clock.IsRunning() && r.Clock.ElapsedSeconds() >= 6300 {
+				return "htet"
+			}
+			return "extratime"
+		}
+	}
+
+	if r.Clock != nil {
+		switch {
+		case r.Clock.ElapsedSeconds() >= 5400:
+			return "extratime"
+		case !r.Clock.IsRunning() && r.Clock.ElapsedSeconds() >= 2700:
+			return "ht"
+		case r.Clock.ElapsedSeconds() > 0:
+			return "live"
+		}
+	}
+
+	if r.Sequence() > 0 && score != nil {
+		return "live"
+	}
+
+	return state
+}
+
+func (r ScoreSnapshotRow) score() *SoccerFixtureScore {
+	if r.ScoreSoccer != nil {
+		return r.ScoreSoccer
+	}
+	if r.Score != nil {
+		return &SoccerFixtureScore{
+			Participant1: r.Score.Participant1,
+			Participant2: r.Score.Participant2,
+		}
+	}
+	return nil
+}
+
+func hasExtraTimePeriod(score SoccerTotalScore) bool {
+	return score.ET1 != nil || score.ET2 != nil || score.ETTotal != nil
+}
+
+func hasPenaltyPeriod(score SoccerTotalScore) bool {
+	return score.PE != nil
 }
 
 // LatestScoreSnapshot returns the newest snapshot row with usable score data.

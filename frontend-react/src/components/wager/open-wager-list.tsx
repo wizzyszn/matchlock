@@ -1,8 +1,9 @@
 import { useWallet } from "@solana/wallet-adapter-react";
-import { Loader2 } from "lucide-react";
 import { useCallback, useMemo, useState } from "react";
 
 import { Button } from "@/components/ui/button";
+import { PageHeader, PageHeaderHeading, PageHeaderDescription } from '@/components/ui/page-header'
+import { Skeleton } from "@/components/ui/skeleton";
 import { OpenWagerCard } from "@/components/wager/open-wager-card";
 import {
   ConfirmTxDialog,
@@ -13,9 +14,9 @@ import { useWagersQuery } from "@/hooks/queries/use-wagers";
 import { useWagerMutations } from "@/hooks/mutations/use-wager-mutations";
 import { useTxFeeEstimate } from "@/hooks/use-tx-fee-estimate";
 import { useWagerTxBuilders } from "@/hooks/use-wager-tx-builders";
-import type { Side } from "@/lib/api";
-import { baseUnitsToUsdc } from "@/lib/format";
-import { matchLabels } from "@/lib/match-display";
+import type { Match, Side } from "@/lib/api";
+import { baseUnitsToUsdt } from "@/lib/format";
+import { classifyMatch, matchLabels } from "@/lib/match-display";
 import { sideLabel } from "@/lib/wager-sides";
 import { cn } from "@/lib/utils";
 
@@ -49,20 +50,23 @@ export function OpenWagerList() {
     wagerPubkey: string;
     maker: string;
     takerSide: Side;
+    matchId: string;
   } | null>(null);
   const [txError, setTxError] = useState<string | null>(null);
   const [signature, setSignature] = useState<string | null>(null);
 
-  const matchMap = useMemo(
-    () => new Map(matches?.map((m) => [m.match_id, m]) ?? []),
-    [matches],
-  );
+  const matchMap = useMemo(() => {
+    const map = new Map<string, Match>();
+    matches?.forEach((m) => map.set(m.match_id, m));
+    return map;
+  }, [matches]);
 
   const filteredWagers = useMemo(() => {
     return (wagers ?? []).filter((wager) => {
       if (walletAddress && wager.maker === walletAddress) return false;
 
       const match = matchMap.get(wager.match_id);
+      if (match && classifyMatch(match) === "finished") return false;
       if (filter === "open") return wager.status === "open";
       if (filter === "live") return match ? matchLabels(match).isLive : false;
       return true;
@@ -79,13 +83,13 @@ export function OpenWagerList() {
       ? sideLabel(takerSide, match)
       : takerSide;
 
-    setAcceptTarget({ wagerPubkey, maker, takerSide });
+    setAcceptTarget({ wagerPubkey, maker, takerSide, matchId: wager.match_id });
     setConfirmDetails({
       action: "accept",
       matchLabel: labels?.league ?? `Match ${wager.match_id}`,
       sideLabel: outcomeLabel,
-      stakeUsdc: baseUnitsToUsdc(wager.stake),
-      payoutUsdc: baseUnitsToUsdc(wager.stake) * 2,
+      stakeUsdt: baseUnitsToUsdt(wager.stake),
+      payoutUsdt: baseUnitsToUsdt(wager.stake) * 2,
     });
     setTxError(null);
     setSignature(null);
@@ -118,19 +122,14 @@ export function OpenWagerList() {
 
   return (
     <section aria-labelledby="open-wagers-heading">
-      <div className="mb-8 flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
-        <div>
-          <h2
-            id="open-wagers-heading"
-            className="font-heading text-3xl leading-tight sm:text-4xl"
-          >
-            Open challenges
-          </h2>
-          <p className="mt-2 max-w-prose text-sm text-muted-foreground">
+      <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
+        <PageHeader className="mb-8 sm:mb-0">
+          <PageHeaderHeading id="open-wagers-heading">Open challenges</PageHeaderHeading>
+          <PageHeaderDescription>
             Head-to-head wagers waiting for a taker. Pick your outcome and match
             the stake.
-          </p>
-        </div>
+          </PageHeaderDescription>
+        </PageHeader>
 
         <div
           className="flex gap-2 overflow-x-auto pb-1 [-ms-overflow-style:none] [scrollbar-none] [&::-webkit-scrollbar]:hidden"
@@ -158,10 +157,28 @@ export function OpenWagerList() {
       </div>
 
       {isLoading ? (
-        <div className="flex items-center gap-2 text-sm text-muted-foreground">
-          <Loader2 className="size-4 animate-spin" />
-          Loading open wagers…
-        </div>
+        <ul className="grid list-none gap-3 sm:grid-cols-2 lg:grid-cols-3">
+          {[1, 2, 3, 4, 5, 6].map((i) => (
+            <li key={i}>
+              <div className="flex flex-col gap-4 rounded-lg border border-border bg-card p-4 shadow-sahara">
+                <div className="flex items-start justify-between mb-2">
+                  <div className="space-y-2">
+                    <Skeleton className="h-4 w-32" />
+                    <Skeleton className="h-3 w-20" />
+                  </div>
+                  <Skeleton className="h-6 w-16 rounded-md" />
+                </div>
+                <div className="flex items-center justify-between py-2 border-t border-border/60 mt-2">
+                   <div className="space-y-1.5">
+                     <Skeleton className="h-3 w-12" />
+                     <Skeleton className="h-5 w-16" />
+                   </div>
+                   <Skeleton className="h-9 w-24 rounded-md" />
+                </div>
+              </div>
+            </li>
+          ))}
+        </ul>
       ) : isError ? (
         <p className="text-sm text-destructive">
           {error instanceof Error ? error.message : "Failed to load wagers"}
@@ -183,7 +200,11 @@ export function OpenWagerList() {
                 <OpenWagerCard
                   wager={wager}
                   match={match}
-                  disabled={!walletAddress || acceptWager.isPending}
+                  disabled={
+                    !walletAddress ||
+                    acceptWager.isPending ||
+                    (match ? classifyMatch(match) === "finished" : false)
+                  }
                   onAccept={(takerSide) =>
                     openAccept(wager.pubkey, wager.maker, takerSide)
                   }

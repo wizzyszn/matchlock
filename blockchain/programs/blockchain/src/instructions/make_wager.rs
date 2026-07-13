@@ -16,7 +16,7 @@ pub struct MakeWager<'info> {
         seeds = [CONFIG_SEED],
         bump = config.bump,
     )]
-    pub config: Account<'info, Config>,
+    pub config: Box<Account<'info, Config>>,
 
     #[account(
         init,
@@ -25,7 +25,16 @@ pub struct MakeWager<'info> {
         seeds = [WAGER_SEED, maker.key().as_ref(), match_id.as_slice(), nonce.to_le_bytes().as_ref()],
         bump
     )]
-    pub wager: Account<'info, Wager>,
+    pub wager: Box<Account<'info, Wager>>,
+
+    #[account(
+        init_if_needed,
+        payer = maker,
+        space = 8 + MatchState::INIT_SPACE,
+        seeds = [MATCH_STATE_SEED, match_id.as_slice()],
+        bump,
+    )]
+    pub match_state: Box<Account<'info, MatchState>>,
 
     #[account(
         init,
@@ -35,26 +44,26 @@ pub struct MakeWager<'info> {
         token::mint = stablecoin_mint,
         token::authority = wager,
     )]
-    pub vault: Account<'info, TokenAccount>,
+    pub vault: Box<Account<'info, TokenAccount>>,
 
     #[account(
         mut,
         associated_token::mint = stablecoin_mint,
         associated_token::authority = maker,
     )]
-    pub maker_stablecoin: Account<'info, TokenAccount>,
+    pub maker_stablecoin: Box<Account<'info, TokenAccount>>,
 
     #[account(
         constraint = stablecoin_mint.key() == config.stablecoin_mint @ ErrorCode::InvalidMint,
     )]
-    pub stablecoin_mint: Account<'info, Mint>,
+    pub stablecoin_mint: Box<Account<'info, Mint>>,
 
     #[account(
         seeds = [WALLET_PROFILE_SEED, maker.key().as_ref()],
         bump = maker_wallet_profile.bump,
         constraint = maker_wallet_profile.wallet == maker.key() @ ErrorCode::WalletNotRegistered,
     )]
-    pub maker_wallet_profile: Account<'info, WalletProfile>,
+    pub maker_wallet_profile: Box<Account<'info, WalletProfile>>,
 
     pub token_program: Program<'info, Token>,
     pub associated_token_program: Program<'info, AssociatedToken>,
@@ -80,6 +89,16 @@ pub fn handle_make_wager(
     );
     require!(stake_amount > 0, ErrorCode::InvalidStake);
     require!(!ctx.accounts.config.paused, ErrorCode::ContractPaused,);
+    initialize_match_state_if_needed(
+        &mut ctx.accounts.match_state,
+        &match_id,
+        ctx.bumps.match_state,
+    );
+    require!(
+        ctx.accounts.match_state.match_id_bytes() == match_id.as_slice(),
+        ErrorCode::InvalidMatchId,
+    );
+    require!(!ctx.accounts.match_state.is_closed, ErrorCode::MatchClosed);
     if invited_taker != Pubkey::default() {
         require_keys_neq!(
             invited_taker,
@@ -123,4 +142,20 @@ pub fn handle_make_wager(
         maker_side
     );
     Ok(())
+}
+
+fn initialize_match_state_if_needed(
+    match_state: &mut Account<MatchState>,
+    match_id: &[u8],
+    bump: u8,
+) {
+    if match_state.match_id_len != 0 {
+        return;
+    }
+    match_state.match_id = [0u8; 32];
+    match_state.match_id[..match_id.len()].copy_from_slice(match_id);
+    match_state.match_id_len = match_id.len() as u8;
+    match_state.is_closed = false;
+    match_state.closed_at = 0;
+    match_state.bump = bump;
 }

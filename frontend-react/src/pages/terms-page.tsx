@@ -1,7 +1,7 @@
 import { Link } from 'react-router-dom'
 import { ArrowLeft } from 'lucide-react'
 
-import { buttonVariants } from '@/components/ui/button'
+import { Button } from '@/components/ui/button'
 
 export function TermsPage() {
   return (
@@ -42,7 +42,7 @@ export function TermsPage() {
           <h2 className="text-base font-semibold text-foreground">3. No Real-Money Gambling</h2>
           <p>
             Matchlock is a decentralized prediction protocol built on Solana. Users wager
-            using USDC or testnet tokens. The Platform is intended for entertainment and
+            using USDT or testnet tokens. The Platform is intended for entertainment and
             skill-based prediction purposes. Nothing on Matchlock constitutes an offer or
             solicitation to engage in real-money gambling.
           </p>

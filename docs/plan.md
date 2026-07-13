@@ -8,7 +8,7 @@ This document is the authoritative engineering roadmap for Matchlock: a decentra
 
 ## 1. Product vision
 
-Matchlock lets users wager USDC on sports outcomes. Wagers are escrowed on Solana, matched peer-to-peer or against shared liquidity pools, and settled trustlessly when TxLINE finalizes match statistics and supplies cryptographic proofs.
+Matchlock lets users wager USDT on sports outcomes. Wagers are escrowed on Solana, matched peer-to-peer or against shared liquidity pools, and settled trustlessly when TxLINE finalizes match statistics and supplies cryptographic proofs.
 
 | Property | Requirement |
 |----------|-------------|
@@ -101,7 +101,7 @@ flowchart TB
 
 **Data flow (wager lifecycle):**
 
-1. Maker calls `make_wager` → USDC locked in vault PDA.
+1. Maker calls `make_wager` → USDT locked in vault PDA.
 2. Taker calls `accept_wager` → matching stake locked; status `Matched`.
 3. Maker may call `cancel_wager` while status is `Open` → full maker refund.
 4. On TxLINE `is_final`, keeper fetches Merkle proof and submits `settle_wager`.
@@ -155,7 +155,7 @@ Apply to **every** phase before marking work complete.
 - [ ] Typed `Account` deserialization with owner checks on every account
 - [ ] Explicit signers for maker, taker, and authority actions
 - [ ] PDA seeds defined in `constants.rs`; vault accounts constrained by seeds + stored bumps
-- [ ] `TransferChecked` only (mint + decimals); USDC mint pinned via config PDA
+- [ ] `TransferChecked` only (mint + decimals); USDT mint pinned via config PDA
 - [ ] Checked arithmetic on all token amounts
 - [ ] Status enum enforces valid transitions; settled/cancelled wagers are terminal
 - [ ] No unconstrained `UncheckedAccount` without documented constraints
@@ -195,7 +195,7 @@ Config must validate cluster ↔ TxLINE origin ↔ USDC mint at process start.
 | Field | Type | Notes |
 |-------|------|-------|
 | `authority` | `Pubkey` | Upgrade/admin; multisig on mainnet |
-| `usdc_mint` | `Pubkey` | Environment-specific USDC mint |
+| `usdt_mint` | `Pubkey` | Environment-specific USDT mint |
 | `txline_program` | `Pubkey` | TxLINE program ID for CPI |
 | `bump` | `u8` | Config PDA bump |
 
@@ -208,7 +208,7 @@ Config must validate cluster ↔ TxLINE origin ↔ USDC mint at process start.
 | `match_id` | `[u8; 32]` | TxLINE match identifier (variable length stored in `match_id_len`) |
 | `match_id_len` | `u8` | 1–32 |
 | `maker_side` | `Side` | Outcome the maker backs (e.g. Home, Away, Over) |
-| `stake_amount` | `u64` | USDC base units per party |
+| `stake_amount` | `u64` | USDT base units per party |
 | `status` | `WagerStatus` | See state machine below |
 | `bump` | `u8` | Wager PDA bump |
 | `vault_bump` | `u8` | Vault PDA bump |
@@ -264,7 +264,7 @@ config: [b"config"]
 
 | # | Task | Acceptance criteria |
 |---|------|---------------------|
-| 1.1 | `Config` account + `initialize` instruction | Pins USDC mint and TxLINE program ID; authority set at init |
+| 1.1 | `Config` account + `initialize` instruction | Pins USDT mint and TxLINE program ID; authority set at init |
 | 1.2 | `Wager` account layout | All fields in §6.2; `InitSpace`; status enum |
 | 1.3 | `make_wager` | Creates wager + vault PDAs; `TransferChecked` maker → vault; status `Open` |
 | 1.4 | `accept_wager` | Vault constrained by `[b"vault", wager]` seeds; taker stake locked; status `Matched` |
@@ -317,7 +317,7 @@ config: [b"config"]
 - `Pool` account and LP token mint
 - Add/remove liquidity instructions
 - Swap or mint pool tokens priced from TxLINE implied probabilities
-- Pool settlement distributing USDC pro-rata to winning side LPs
+- Pool settlement distributing USDT pro-rata to winning side LPs
 - Frontend pool panels and live odds charts from backend cache
 
 **Out of scope**
@@ -336,7 +336,7 @@ config: [b"config"]
 #### Phase 2 definition of done
 
 - [ ] Pool created for a live match; multiple LPs deposit; positions shift as odds update
-- [ ] Keeper settles pool on `is_final`; USDC distributed correctly to winning LPs
+- [ ] Keeper settles pool on `is_final`; USDT distributed correctly to winning LPs
 - [ ] On-chain + Go tests cover arithmetic edge cases (zero liquidity, rounding)
 
 ---

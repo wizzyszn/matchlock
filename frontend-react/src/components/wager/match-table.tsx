@@ -1,7 +1,8 @@
-import { Loader2, Swords, Trophy } from 'lucide-react'
+import { Swords, Trophy } from 'lucide-react'
 import { memo, useEffect, useMemo, useState } from 'react'
 
 import { Button } from '@/components/ui/button'
+import { Skeleton } from '@/components/ui/skeleton'
 import { ChallengeSlipDialog } from '@/components/wager/challenge-slip'
 import { TeamRow } from '@/components/wager/team-row'
 import { useMediaQuery } from '@/hooks/use-media-query'
@@ -414,7 +415,7 @@ function MobileCompetitionSection({
 }
 
 export function MatchTable() {
-  const { data: matches, isLoading, isError, error } = useMatchesQuery()
+  const { data: matches, isError, error, isLoading } = useMatchesQuery()
   const isDesktop = useMediaQuery('(min-width: 40rem)')
   const [activeFilter, setActiveFilter] = useState<MatchFilter>('live')
   const [filterTouched, setFilterTouched] = useState(false)
@@ -459,9 +460,53 @@ export function MatchTable() {
 
   if (isLoading) {
     return (
-      <div className="flex items-center gap-2 text-sm text-muted-foreground">
-        <Loader2 className="size-4 animate-spin" />
-        Loading matches…
+      <div className="space-y-4">
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+          <div className="flex gap-2 pb-1">
+            <Skeleton className="h-11 w-24 rounded-full" />
+            <Skeleton className="h-11 w-24 rounded-full" />
+            <Skeleton className="h-11 w-28 rounded-full" />
+          </div>
+          <div className="flex items-center justify-end gap-2">
+            <Skeleton className="h-4 w-8" />
+            <Skeleton className="h-6 w-11 rounded-full" />
+          </div>
+        </div>
+
+        <div className="space-y-4">
+          {[1, 2].map((i) => (
+            <div key={i} className="overflow-hidden rounded-lg border border-border bg-card shadow-sahara">
+              <div className="flex items-center gap-2 border-b border-border bg-muted/40 px-4 py-3">
+                <Skeleton className="size-4 rounded-full shrink-0" />
+                <div className="min-w-0 space-y-1.5">
+                  <Skeleton className="h-5 w-32" />
+                  <Skeleton className="h-3 w-16" />
+                </div>
+              </div>
+              <div className="divide-y divide-border/60">
+                {[1, 2, 3].map((j) => (
+                  <div key={j} className="flex items-center gap-3 px-3 py-3">
+                    <div className="min-w-0 flex-1">
+                      <div className="flex items-baseline justify-between mb-3">
+                        <Skeleton className="h-3 w-20" />
+                        <Skeleton className="h-3 w-8" />
+                      </div>
+                      <div className="flex flex-col gap-2">
+                        <Skeleton className="h-4 w-48 max-w-[80%]" />
+                        <Skeleton className="h-4 w-40 max-w-[70%]" />
+                      </div>
+                    </div>
+                    <div className="hidden sm:flex shrink-0 items-center gap-1.5 self-center">
+                      <Skeleton className="h-11 w-11 rounded-md" />
+                      <Skeleton className="h-11 w-11 rounded-md" />
+                      <Skeleton className="h-11 w-11 rounded-md" />
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          ))}
+        </div>
       </div>
     )
   }

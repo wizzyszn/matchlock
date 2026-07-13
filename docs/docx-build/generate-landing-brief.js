@@ -233,7 +233,7 @@ const doc = new Document({
         heading1("2. Product summary"),
         heading2("What is Matchlock?"),
         body(
-          "Matchlock lets sports fans wager USDC on match outcomes directly against other players — not against a house or bookmaker. Wagers are escrowed in Solana program-controlled vaults, matched peer-to-peer, and settled automatically when TxLINE (an on-chain sports data oracle) finalizes match statistics and supplies cryptographic proofs."
+          "Matchlock lets sports fans wager USDT on match outcomes directly against other players — not against a house or bookmaker. Wagers are escrowed in Solana program-controlled vaults, matched peer-to-peer, and settled automatically when TxLINE (an on-chain sports data oracle) finalizes match statistics and supplies cryptographic proofs."
         ),
         body(
           "Tagline direction: “Challenge another player. Settle on-chain.” or “Peer-to-peer sports wagers, settled by truth.”"
@@ -267,7 +267,7 @@ const doc = new Document({
             ],
             [
               "Create wager (Maker)",
-              "Pick match, pick side (Home / Draw / Away), set USDC stake, sign make_wager tx",
+              "Pick match, pick side (Home / Draw / Away), set USDT stake, sign make_wager tx",
               "“Post a challenge” — emphasize you pick the side and stake",
             ],
             [
@@ -296,7 +296,7 @@ const doc = new Document({
           "Matched PvP wagers pay exactly 2× stake to the winner. Both players lock equal stakes; the winner takes the combined pool. There are no odds from a bookmaker — only a clear payout multiple."
         ),
         body(
-          "Example copy: “Stake 50 USDC. Beat your opponent. Win 100 USDC.”"
+          "Example copy: “Stake 50 USDT. Beat your opponent. Win 100 USDT.”"
         ),
 
         heading2("Authentication & wallet"),
@@ -417,7 +417,7 @@ const doc = new Document({
           [
             ["1", "Pick a match", "Browse live World Cup fixtures with real-time status"],
             ["2", "Challenge or accept", "Create a wager on your side, or take the opposite side of an open challenge"],
-            ["3", "Stakes lock on-chain", "USDC moves to a program vault — not our wallet"],
+            ["3", "Stakes lock on-chain", "USDT moves to a program vault — not our wallet"],
             ["4", "Settle automatically", "When the match ends, TxLINE proves the result; winner gets 2× stake"],
           ],
           [800, 2400, 6160]
@@ -563,7 +563,7 @@ const doc = new Document({
         ),
 
         heading2("Settlement flow (for explainer animation)"),
-        bullet("numbers", "Maker creates wager → USDC locked in vault PDA."),
+        bullet("numbers", "Maker creates wager → USDT locked in vault PDA."),
         bullet("numbers", "Taker accepts → matching stake locked; status Matched."),
         bullet("numbers", "Match plays → live status from TxLINE SSE."),
         bullet("numbers", "Match goes final → keeper fetches Merkle proof."),
@@ -572,7 +572,7 @@ const doc = new Document({
 
         heading2("Collateral"),
         body(
-          "Wagers use USDC (devnet test stablecoin today; mainnet USDC at launch). TxLINE credit tokens are for API authorization only — never shown to end users as wager collateral."
+          "Wagers use USDT (devnet test stablecoin today; mainnet USDC at launch). TxLINE credit tokens are for API authorization only — never shown to end users as wager collateral."
         ),
 
         heading1("10. Accessibility & responsive requirements"),

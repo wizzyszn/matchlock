@@ -11,7 +11,7 @@ export function AuthGuard() {
     return (
       <AuthTransitionLoader
         title="Checking session"
-        subtitle="Verifying your Matchlock credentials on devnet…"
+  
       />
     )
   }

@@ -1,11 +1,13 @@
 import { ChevronDown, Loader2, TrendingUp, Users, Trophy, Medal, Percent } from 'lucide-react'
+import { PageHeader, PageHeaderHeading, PageHeaderDescription } from '@/components/ui/page-header'
+import { Skeleton } from '@/components/ui/skeleton'
 
 import {
   useLeaderboardQuery,
   useMyLeaderboardRankQuery,
   useLeaderboardStatsQuery,
 } from '@/hooks/queries/use-leaderboard'
-import { formatUsdc } from '@/lib/format'
+import { formatUsdt } from '@/lib/format'
 import { cn } from '@/lib/utils'
 
 function RankIcon({ rank }: { rank: number }) {
@@ -22,7 +24,7 @@ function PnLBadge({ value }: { value: number }) {
       'tabular-nums font-medium',
       value > 0 ? 'text-status-matched' : 'text-destructive',
     )}>
-      {value > 0 ? '+' : ''}{formatUsdc(value)}
+      {value > 0 ? '+' : ''}{formatUsdt(value)}
     </span>
   )
 }
@@ -48,9 +50,38 @@ export function LeaderboardPage() {
 
   if (isLoading) {
     return (
-      <div className="flex items-center gap-2 text-sm text-muted-foreground">
-        <Loader2 className="size-4 animate-spin" />
-        Loading leaderboard…
+      <div className="space-y-6">
+        <div>
+          <Skeleton className="h-10 w-48 mb-2" />
+          <Skeleton className="h-4 w-72" />
+        </div>
+
+        <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+          {[1, 2, 3, 4].map(i => (
+             <div key={i} className="rounded-lg border bg-card p-4 space-y-3">
+                <Skeleton className="h-4 w-24" />
+                <Skeleton className="h-8 w-20" />
+             </div>
+          ))}
+        </div>
+
+        <div className="overflow-hidden rounded-lg border bg-card shadow-sahara">
+          <ul className="divide-y divide-border/60">
+             {[1, 2, 3, 4, 5, 6].map(i => (
+               <li key={i} className="flex items-center gap-3 px-4 py-3">
+                 <Skeleton className="size-8 rounded-full shrink-0" />
+                 <div className="flex-1 space-y-2">
+                   <Skeleton className="h-4 w-32" />
+                   <Skeleton className="h-3 w-24" />
+                 </div>
+                 <div className="flex flex-col items-end space-y-2">
+                   <Skeleton className="h-4 w-16" />
+                   <Skeleton className="h-3 w-12" />
+                 </div>
+               </li>
+             ))}
+          </ul>
+        </div>
       </div>
     )
   }
@@ -65,12 +96,12 @@ export function LeaderboardPage() {
 
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="font-heading text-3xl tracking-tight sm:text-4xl">Leaderboard</h1>
-        <p className="mt-2 text-sm text-muted-foreground">
+      <PageHeader>
+        <PageHeaderHeading>Leaderboard</PageHeaderHeading>
+        <PageHeaderDescription>
           Top predictors ranked by net PnL. Updated after each settlement.
-        </p>
-      </div>
+        </PageHeaderDescription>
+      </PageHeader>
 
       {stats ? (
         <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
@@ -80,7 +111,7 @@ export function LeaderboardPage() {
               <span>Total Volume</span>
             </div>
             <p className="mt-1 font-heading text-2xl font-semibold tabular-nums">
-              {formatUsdc(stats.total_volume)} <span className="text-xs font-normal text-muted-foreground">USDC</span>
+              {formatUsdt(stats.total_volume)} <span className="text-xs font-normal text-muted-foreground">USDT</span>
             </p>
           </div>
           <div className="rounded-lg border bg-card p-4">

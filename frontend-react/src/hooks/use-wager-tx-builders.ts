@@ -4,7 +4,7 @@ import { useCallback, useMemo } from 'react'
 
 import { useConfig } from '@/hooks/use-api'
 import type { SettlementProof, Side } from '@/lib/api'
-import { getProgram, getUsdcMint } from '@/lib/anchor'
+import { getProgram, getUsdtMint } from '@/lib/anchor'
 import {
   buildAcceptWagerTransaction,
   buildCancelWagerTransaction,
@@ -21,7 +21,7 @@ export function useWagerTxBuilders() {
     () => (wallet ? getProgram(connection, wallet) : null),
     [connection, wallet],
   )
-  const stablecoinMint = useMemo(() => getUsdcMint(config), [config])
+  const stablecoinMint = useMemo(() => getUsdtMint(config), [config])
 
   const buildMake = useCallback(
     async (input: {
@@ -51,6 +51,7 @@ export function useWagerTxBuilders() {
     async (input: {
       wagerPubkey: string
       maker: string
+      matchId: string
       takerSide: Side
     }) => {
       if (!wallet?.publicKey || !program) return null
@@ -59,6 +60,7 @@ export function useWagerTxBuilders() {
         wallet,
         wagerPubkey: new PublicKey(input.wagerPubkey),
         maker: new PublicKey(input.maker),
+        matchId: input.matchId,
         takerSide: input.takerSide,
         stablecoinMint,
       })

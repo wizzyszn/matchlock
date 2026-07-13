@@ -7,6 +7,7 @@ import {
   classifyMatch,
   formatKickoffClock,
   formatKickoffDate,
+  formatStatusShort,
   groupMatchesByCompetition,
   matchLabels,
   matchScores,
@@ -33,6 +34,7 @@ function FixtureCard({
   const scores = matchScores(match)
   const phase = classifyMatch(match)
   const isLive = phase === 'live'
+  const statusShort = formatStatusShort(match)
   const cardRef = useRef<HTMLButtonElement>(null)
 
   useEffect(() => {
@@ -60,13 +62,24 @@ function FixtureCard({
         <span className="tabular-nums">
           {formatKickoffDate(match)} · {formatKickoffClock(match)}
         </span>
-        {isLive ? (
-          <span className="inline-flex items-center gap-1 font-medium text-status-open">
-            <span
-              className="size-1.5 rounded-full bg-status-open motion-safe:animate-pulse"
-              aria-hidden
-            />
-            Live
+        {statusShort !== '—' ? (
+          <span
+            className={cn(
+              'inline-flex items-center gap-1 font-medium',
+              match.is_final
+                ? 'text-muted-foreground'
+                : isLive
+                  ? 'text-status-open'
+                  : 'text-muted-foreground',
+            )}
+          >
+            {isLive ? (
+              <span
+                className="size-1.5 rounded-full bg-status-open motion-safe:animate-pulse"
+                aria-hidden
+              />
+            ) : null}
+            {statusShort}
           </span>
         ) : null}
       </div>

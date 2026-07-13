@@ -1,10 +1,11 @@
 import { Loader2 } from 'lucide-react'
+import usdtLogo from '@/assets/usdt-svgrepo-com.svg'
 
 import { Button } from '@/components/ui/button'
 import { Dialog } from '@/components/ui/dialog'
 import type { TxFeeEstimate } from '@/hooks/use-tx-fee-estimate'
 import { clusterLabel } from '@/lib/config'
-import { explorerTxUrl, formatSol, formatUsdc, truncateAddress } from '@/lib/format'
+import { explorerTxUrl, formatSol, formatUsdt, truncateAddress } from '@/lib/format'
 import { useConfig } from '@/hooks/use-api'
 import { useStablecoinLabel } from '@/hooks/use-stablecoin-label'
 
@@ -12,8 +13,8 @@ export type ConfirmTxDetails = {
   action: 'make' | 'accept' | 'cancel' | 'claim'
   matchLabel: string
   sideLabel: string
-  stakeUsdc: number
-  payoutUsdc?: number
+  stakeUsdt: number
+  payoutUsdt?: number
 }
 
 type ConfirmTxDialogProps = {
@@ -53,8 +54,8 @@ export function ConfirmTxDialog({
 
   const title = ACTION_LABELS[details.action]
   const payout =
-    details.payoutUsdc ??
-    (details.action === 'cancel' ? details.stakeUsdc : details.stakeUsdc * 2)
+    details.payoutUsdt ??
+    (details.action === 'cancel' ? details.stakeUsdt : details.stakeUsdt * 2)
 
   const feeLoading = feeEstimate?.loading ?? false
   const feeLamports = feeEstimate?.lamports
@@ -85,7 +86,7 @@ export function ConfirmTxDialog({
         <div className="flex justify-between gap-4">
           <dt className="text-muted-foreground">Stake</dt>
           <dd className="tabular-nums font-medium">
-            {formatUsdc(details.stakeUsdc)} {stablecoin}
+            <img src={usdtLogo} alt="USDT" className="inline-block size-4 -mt-px" /> {formatUsdt(details.stakeUsdt)} {stablecoin}
           </dd>
         </div>
         <div className="flex justify-between gap-4">
@@ -97,7 +98,7 @@ export function ConfirmTxDialog({
                 : 'Potential payout'}
           </dt>
           <dd className="tabular-nums font-semibold text-primary">
-            {formatUsdc(payout)} {stablecoin}
+            <img src={usdtLogo} alt="USDT" className="inline-block size-4 -mt-px" /> {formatUsdt(payout)} {stablecoin}
           </dd>
         </div>
         <div className="flex justify-between gap-4">

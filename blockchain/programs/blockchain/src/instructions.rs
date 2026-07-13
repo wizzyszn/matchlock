@@ -1,5 +1,7 @@
 pub mod accept_wager;
 pub mod cancel_wager;
+pub mod close_match;
+pub mod init_match_state;
 pub mod initialize;
 pub mod make_wager;
 pub mod register_wallet;
@@ -9,6 +11,8 @@ pub mod update_config;
 
 pub use accept_wager::*;
 pub use cancel_wager::*;
+pub use close_match::*;
+pub use init_match_state::*;
 pub use initialize::*;
 pub use make_wager::*;
 pub use register_wallet::*;

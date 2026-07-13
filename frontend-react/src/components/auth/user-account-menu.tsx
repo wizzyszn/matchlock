@@ -66,15 +66,15 @@ export function UserAccountMenu() {
         )}
       >
         <UserAvatar label={label} />
-        <span className="flex min-w-0 flex-col items-start leading-tight">
+        {/* <span className="flex min-w-0 flex-col items-start leading-tight">
           <span className="truncate font-medium">
             {showSetupBadge ? "Set username" : label}
           </span>
-        </span>
+        </span> */}
         <ChevronDown className="size-3.5 shrink-0 text-muted-foreground" />
       </DropdownMenuTrigger>
 
-      <DropdownMenuContent align="end" className="w-80">
+      <DropdownMenuContent align="end" className="w-50">
         <DropdownMenuGroup>
           <DropdownMenuLabel className="font-normal">
             <div className="flex items-center gap-2">

@@ -12,7 +12,7 @@ export function useTokenBalanceQuery() {
   const config = useConfig()
 
   const owner = publicKey?.toBase58() ?? ''
-  const mint = config.usdcMint
+  const mint = config.usdtMint
 
   return useQuery({
     queryKey: queryKeys.tokenBalance(owner, mint),

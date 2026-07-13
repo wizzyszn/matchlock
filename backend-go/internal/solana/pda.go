@@ -8,6 +8,7 @@ import (
 
 const (
 	ConfigSeed           = "config"
+	MatchStateSeed       = "match_state"
 	WagerSeed            = "wager"
 	VaultSeed            = "vault"
 	WalletProfileSeed    = "wallet_profile"
@@ -20,6 +21,10 @@ func FindWalletProfilePDA(programID, wallet solana.PublicKey) (solana.PublicKey,
 
 func FindConfigPDA(programID solana.PublicKey) (solana.PublicKey, uint8, error) {
 	return solana.FindProgramAddress([][]byte{[]byte(ConfigSeed)}, programID)
+}
+
+func FindMatchStatePDA(programID solana.PublicKey, matchID []byte) (solana.PublicKey, uint8, error) {
+	return solana.FindProgramAddress([][]byte{[]byte(MatchStateSeed), matchID}, programID)
 }
 
 func FindVaultPDA(programID, wager solana.PublicKey) (solana.PublicKey, uint8, error) {

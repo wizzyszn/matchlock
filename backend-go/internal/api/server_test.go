@@ -600,6 +600,71 @@ func TestGetWagerSettlementRefreshesVerifiedFinal(t *testing.T) {
 	}
 }
 
+func TestGetWagerSettlementKeepsEligibleLiveMatchLive(t *testing.T) {
+	pubkey := solana.NewWallet().PublicKey()
+	wager := chainsol.Wager{
+		Pubkey:     pubkey,
+		Maker:      solana.NewWallet().PublicKey(),
+		Taker:      solana.NewWallet().PublicKey(),
+		MatchIDLen: 8,
+		MakerSide:  chainsol.SideHome,
+		TakerSide:  chainsol.SideAway,
+		Stake:      1_000_000,
+		Status:     chainsol.WagerStatusMatched,
+	}
+	copy(wager.MatchID[:], []byte("18213979"))
+	cacheStore := &fakeCache{matches: map[string]cache.Match{
+		"18213979": {
+			MatchID:   "18213979",
+			FixtureID: 18213979,
+			GameState: "HT",
+			StartTime: time.Now().Add(-2 * time.Hour).UnixMilli(),
+			Seq:       77,
+			UpdatedAt: time.Now().UTC(),
+		},
+	}}
+	h := &handler{
+		cache:  cacheStore,
+		wagers: &fakeWagers{wagers: []chainsol.Wager{wager}},
+		redis:  fakeProbe{},
+		rpc:    fakeProbe{},
+		txline: fakeProbe{},
+		txlineData: settlementSnapshotTxline{rows: []txline.ScoreSnapshotRow{{
+			FixtureID:          18213979,
+			GameState:          "HT",
+			Seq:                77,
+			Participant1IsHome: true,
+			ScoreSoccer: &txline.SoccerFixtureScore{
+				Participant1: txline.SoccerTotalScore{Goals: 1},
+				Participant2: txline.SoccerTotalScore{Goals: 1},
+			},
+		}}},
+	}
+	handler := corsMiddleware([]string{"http://localhost:5173"})(newMux(h))
+
+	req := httptest.NewRequest(http.MethodGet, "/wagers/"+pubkey.String()+"/settlement", nil)
+	rec := httptest.NewRecorder()
+	handler.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d body=%s", rec.Code, rec.Body.String())
+	}
+	var body SettlementStatusView
+	if err := json.Unmarshal(rec.Body.Bytes(), &body); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	if body.State != settlementStateMatchLive {
+		t.Fatalf("state = %q, want %q body=%s", body.State, settlementStateMatchLive, rec.Body.String())
+	}
+	got, err := cacheStore.GetMatch(context.Background(), "18213979")
+	if err != nil {
+		t.Fatalf("GetMatch: %v", err)
+	}
+	if got.IsFinal {
+		t.Fatalf("live match was incorrectly finalized: %#v", got)
+	}
+}
+
 func TestCORSAllowsFrontendOrigin(t *testing.T) {
 	handler := newTestHandler(t, &fakeCache{matches: map[string]cache.Match{}}, &fakeWagers{})
 	req := httptest.NewRequest(http.MethodOptions, "/matches", nil)

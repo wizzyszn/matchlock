@@ -363,7 +363,7 @@ Env: `KEEPER_AUTO_SETTLE=false` in `backend-go/.env`. Set `true` only if ops sho
 
 #### 💡 Tips
 
-- Winners need a small SOL balance for claim (USDC stake alone is not enough).
+- Winners need a small SOL balance for claim (USDT stake alone is not enough).
 - Browser never calls TxLINE directly; proof API keeps `X-Api-Token` server-side.
 - Priority fees are not included in UI estimates unless the wallet adds them.
 
@@ -514,7 +514,7 @@ After Agenda 1 (challenge slip + draw), ship Agenda 4 before Agenda 3 (faucet UX
 
 - [ ] Exact SSE event schema for World Cup matches — capture first real payload here
 - [ ] TxLINE `validate_stat` CPI account layout for Phase 2 settlement
-- [x] Devnet USDC mint address for wager tests — `ELWTKspHKCnCfCiCiqYw1EDH77k8VCP74dK9qytG2Ujh` (TxLINE devnet USDT)
+- [x] Devnet USDT mint address for wager tests — `ELWTKspHKCnCfCiCiqYw1EDH77k8VCP74dK9qytG2Ujh` (TxLINE devnet USDT)
 - [x] Merkle proof REST endpoint path after `is_final` — `GET /wagers/{pubkey}/settlement-proof` (backend brokers `GET /api/scores/stat-validation`)
 
 ---

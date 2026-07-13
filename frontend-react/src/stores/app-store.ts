@@ -16,7 +16,7 @@ const fallbackConfig: AppConfig = {
   programId: '7jbdwJLrePo6dr6Jo5sSmK4RQC5tYRrGebnkMFTuPGq5',
   backendUrl: 'http://localhost:8080',
   cluster: 'devnet',
-  usdcMint: 'ELWTKspHKCnCfCiCiqYw1EDH77k8VCP74dK9qytG2Ujh',
+  usdtMint: 'ELWTKspHKCnCfCiCiqYw1EDH77k8VCP74dK9qytG2Ujh',
 }
 
 const config = configResult.ok ? configResult.config : fallbackConfig

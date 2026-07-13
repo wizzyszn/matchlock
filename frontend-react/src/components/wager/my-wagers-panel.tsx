@@ -1,5 +1,4 @@
 import { useWallet } from '@solana/wallet-adapter-react'
-import { Loader2 } from 'lucide-react'
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import confetti from 'canvas-confetti'
@@ -9,6 +8,7 @@ import {
   ConfirmTxDialog,
   type ConfirmTxDetails,
 } from '@/components/wager/confirm-tx-dialog'
+import { Skeleton } from '@/components/ui/skeleton'
 import { MyWagerCard } from '@/components/wager/my-wager-card'
 import { useMatchesQuery } from '@/hooks/queries/use-matches'
 import { useWagerSettlementQuery, useWagersQuery } from '@/hooks/queries/use-wagers'
@@ -17,7 +17,7 @@ import { useApi } from '@/hooks/use-api'
 import type { Match, Wager } from '@/lib/api'
 import { useTxFeeEstimate } from '@/hooks/use-tx-fee-estimate'
 import { useWagerTxBuilders } from '@/hooks/use-wager-tx-builders'
-import { baseUnitsToUsdc } from '@/lib/format'
+import { baseUnitsToUsdt } from '@/lib/format'
 import { matchLabels } from '@/lib/match-display'
 import { canClaimWinnings, userBackedSide } from '@/lib/wager-outcome'
 import { sideLabel } from '@/lib/wager-sides'
@@ -92,14 +92,14 @@ export function MyWagersPanel() {
     return () => window.clearInterval(timer)
   }, [pruneExpired])
 
-  const openCancel = (wager: Wager, stakeUsdc: number, matchLabel: string) => {
+  const openCancel = (wager: Wager, stakeUsdt: number, matchLabel: string) => {
     setClaimTarget(null)
     setCancelTarget(wager)
     setConfirmDetails({
       action: 'cancel',
       matchLabel,
       sideLabel: '—',
-      stakeUsdc,
+      stakeUsdt,
     })
     setTxError(null)
     setSignature(null)
@@ -108,7 +108,7 @@ export function MyWagersPanel() {
 
   const openClaim = (
     wagerPubkey: string,
-    stakeUsdc: number,
+    stakeUsdt: number,
     matchLabel: string,
     side: string,
   ) => {
@@ -118,8 +118,8 @@ export function MyWagersPanel() {
       action: 'claim',
       matchLabel,
       sideLabel: side,
-      stakeUsdc,
-      payoutUsdc: stakeUsdc * 2,
+      stakeUsdt,
+      payoutUsdt: stakeUsdt * 2,
     })
     setTxError(null)
     setSignature(null)
@@ -193,10 +193,28 @@ export function MyWagersPanel() {
 
   if (isLoading && myWagers.length === 0) {
     return (
-      <div className="flex items-center gap-2 text-sm text-muted-foreground">
-        <Loader2 className="size-4 animate-spin" />
-        Loading your wagers…
-      </div>
+      <ul className="grid list-none gap-3 sm:grid-cols-2 lg:grid-cols-3">
+        {[1, 2, 3, 4, 5, 6].map((i) => (
+          <li key={i}>
+            <div className="flex flex-col gap-4 rounded-lg border border-border bg-card p-4 shadow-sahara">
+              <div className="flex items-start justify-between mb-2">
+                <div className="space-y-2">
+                  <Skeleton className="h-4 w-32" />
+                  <Skeleton className="h-3 w-20" />
+                </div>
+                <Skeleton className="h-6 w-16 rounded-md" />
+              </div>
+              <div className="flex items-center justify-between py-2 border-t border-border/60 mt-2">
+                 <div className="space-y-1.5">
+                   <Skeleton className="h-3 w-12" />
+                   <Skeleton className="h-5 w-16" />
+                 </div>
+                 <Skeleton className="h-9 w-24 rounded-md" />
+              </div>
+            </div>
+          </li>
+        ))}
+      </ul>
     )
   }
 
@@ -251,11 +269,11 @@ type MyWagerListItemProps = {
   onSelect: () => void
   onClaim: (
     wagerPubkey: string,
-    stakeUsdc: number,
+    stakeUsdt: number,
     matchLabel: string,
     side: string,
   ) => void
-  onCancel: (wager: Wager, stakeUsdc: number, matchLabel: string) => void
+  onCancel: (wager: Wager, stakeUsdt: number, matchLabel: string) => void
 }
 
 function MyWagerListItem({
@@ -288,7 +306,7 @@ function MyWagerListItem({
         onClaim={() =>
           onClaim(
             wager.pubkey,
-            baseUnitsToUsdc(wager.stake),
+            baseUnitsToUsdt(wager.stake),
             labels?.league ?? `Match ${wager.match_id}`,
             backed,
           )
@@ -296,7 +314,7 @@ function MyWagerListItem({
         onCancel={() =>
           onCancel(
             wager,
-            baseUnitsToUsdc(wager.stake),
+            baseUnitsToUsdt(wager.stake),
             labels?.league ?? `Match ${wager.match_id}`,
           )
         }

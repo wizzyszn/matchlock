@@ -67,13 +67,16 @@ func (w *Worker) ReconcileFinalMatches(ctx context.Context) error {
 	}
 
 	for _, match := range matches {
-		if !match.IsFinal {
+		if !match.IsFinal && !cache.FinalVerificationEligible(match, time.Now().UTC()) {
 			continue
 		}
 		_, update, err := w.RefreshVerifiedFinal(ctx, match)
 		if err != nil {
 			slog.Debug("skip reconcile match", "match_id", match.MatchID, "err", err)
 			continue
+		}
+		if err := w.closeMatchOnChain(ctx, update.MatchID()); err != nil {
+			slog.Error("reconcile close match failed", "match_id", match.MatchID, "err", err)
 		}
 		if w.AutoSettle {
 			if err := w.SettleMatch(ctx, update); err != nil {

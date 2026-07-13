@@ -134,15 +134,17 @@ func (h *handler) refreshVerifiedFinalForWager(ctx context.Context, wager chains
 	if err != nil {
 		return
 	}
-	candidate := cache.InferFinalState(match, time.Now().UTC())
-	if !candidate.IsFinal || candidate.FinalSource == cache.FinalSourceTxline {
+	if match.IsFinal && match.FinalSource == cache.FinalSourceTxline {
+		return
+	}
+	if !match.IsFinal && !cache.FinalVerificationEligible(match, time.Now().UTC()) {
 		return
 	}
 
 	worker := &keeper.Worker{Cache: h.cache, Txline: h.txlineData}
-	if _, _, err := worker.RefreshVerifiedFinal(ctx, candidate); err != nil {
+	if _, _, err := worker.RefreshVerifiedFinal(ctx, match); err != nil {
 		slog.Debug("settlement final verification unavailable",
-			"match_id", candidate.MatchID,
+			"match_id", match.MatchID,
 			"err", err,
 		)
 	}

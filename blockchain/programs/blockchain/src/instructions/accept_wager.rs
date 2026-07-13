@@ -16,14 +16,23 @@ pub struct AcceptWager<'info> {
         seeds = [CONFIG_SEED],
         bump = config.bump,
     )]
-    pub config: Account<'info, Config>,
+    pub config: Box<Account<'info, Config>>,
 
     #[account(
         mut,
         has_one = maker @ ErrorCode::Unauthorized,
         constraint = wager.status == WagerStatus::Open @ ErrorCode::WagerNotOpen,
     )]
-    pub wager: Account<'info, Wager>,
+    pub wager: Box<Account<'info, Wager>>,
+
+    #[account(
+        init_if_needed,
+        payer = taker,
+        space = 8 + MatchState::INIT_SPACE,
+        seeds = [MATCH_STATE_SEED, &wager.match_id[..wager.match_id_len as usize]],
+        bump,
+    )]
+    pub match_state: Box<Account<'info, MatchState>>,
 
     /// CHECK: validated via has_one on wager.maker
     pub maker: UncheckedAccount<'info>,
@@ -33,7 +42,7 @@ pub struct AcceptWager<'info> {
         associated_token::mint = stablecoin_mint,
         associated_token::authority = taker,
     )]
-    pub taker_stablecoin: Account<'info, TokenAccount>,
+    pub taker_stablecoin: Box<Account<'info, TokenAccount>>,
 
     #[account(
         mut,
@@ -42,26 +51,37 @@ pub struct AcceptWager<'info> {
         token::mint = stablecoin_mint,
         token::authority = wager,
     )]
-    pub vault: Account<'info, TokenAccount>,
+    pub vault: Box<Account<'info, TokenAccount>>,
 
     #[account(
         constraint = stablecoin_mint.key() == config.stablecoin_mint @ ErrorCode::InvalidMint,
     )]
-    pub stablecoin_mint: Account<'info, Mint>,
+    pub stablecoin_mint: Box<Account<'info, Mint>>,
 
     #[account(
         seeds = [WALLET_PROFILE_SEED, taker.key().as_ref()],
         bump = taker_wallet_profile.bump,
         constraint = taker_wallet_profile.wallet == taker.key() @ ErrorCode::WalletNotRegistered,
     )]
-    pub taker_wallet_profile: Account<'info, WalletProfile>,
+    pub taker_wallet_profile: Box<Account<'info, WalletProfile>>,
 
     pub token_program: Program<'info, Token>,
     pub associated_token_program: Program<'info, AssociatedToken>,
+    pub system_program: Program<'info, System>,
 }
 
 pub fn handle_accept_wager(ctx: Context<AcceptWager>, taker_side: Side) -> Result<()> {
     require!(!ctx.accounts.config.paused, ErrorCode::ContractPaused,);
+    initialize_match_state_if_needed(
+        &mut ctx.accounts.match_state,
+        ctx.accounts.wager.match_id_bytes(),
+        ctx.bumps.match_state,
+    );
+    require!(
+        ctx.accounts.match_state.match_id_bytes() == ctx.accounts.wager.match_id_bytes(),
+        ErrorCode::InvalidMatchId,
+    );
+    require!(!ctx.accounts.match_state.is_closed, ErrorCode::MatchClosed);
     require_keys_neq!(
         ctx.accounts.taker.key(),
         ctx.accounts.wager.maker,
@@ -105,4 +125,20 @@ pub fn handle_accept_wager(ctx: Context<AcceptWager>, taker_side: Side) -> Resul
             .ok_or(ProgramError::ArithmeticOverflow)?,
     );
     Ok(())
+}
+
+fn initialize_match_state_if_needed(
+    match_state: &mut Account<MatchState>,
+    match_id: &[u8],
+    bump: u8,
+) {
+    if match_state.match_id_len != 0 {
+        return;
+    }
+    match_state.match_id = [0u8; 32];
+    match_state.match_id[..match_id.len()].copy_from_slice(match_id);
+    match_state.match_id_len = match_id.len() as u8;
+    match_state.is_closed = false;
+    match_state.closed_at = 0;
+    match_state.bump = bump;
 }

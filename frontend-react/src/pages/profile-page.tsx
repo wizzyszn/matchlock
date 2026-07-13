@@ -4,7 +4,6 @@ import { WalletReadyState, type WalletName } from '@solana/wallet-adapter-base'
 import {
   Check,
   Copy,
-  Loader2,
   LogOut,
   Star,
   Trash2,
@@ -20,7 +19,9 @@ import {
   CardHeader,
   CardTitle,
 } from '@/components/ui/card'
+import { PageHeader, PageHeaderHeading, PageHeaderDescription } from '@/components/ui/page-header'
 import { Input } from '@/components/ui/input'
+import { Skeleton } from '@/components/ui/skeleton'
 import { useAuthMutations } from '@/hooks/mutations/use-auth-mutations'
 import { useSessionQuery } from '@/hooks/queries/use-session'
 import { useWalletLinkStatus } from '@/hooks/use-wallet-link-status'
@@ -53,8 +54,29 @@ export function ProfilePage() {
 
   if (isLoading || !session) {
     return (
-      <div className="flex justify-center py-16">
-        <Loader2 className="size-8 animate-spin text-primary" aria-hidden />
+      <div className="mx-auto max-w-2xl space-y-5">
+        <div className="space-y-2 mb-6">
+          <Skeleton className="h-9 w-32" />
+          <Skeleton className="h-4 w-48" />
+        </div>
+        
+        <div className="rounded-xl border bg-card text-card-foreground shadow space-y-4">
+           <div className="p-6 pb-3 space-y-2">
+              <Skeleton className="h-6 w-24" />
+              <Skeleton className="h-4 w-64 max-w-full" />
+           </div>
+           <div className="p-6 pt-0 space-y-4">
+              <div className="space-y-2">
+                 <Skeleton className="h-4 w-12" />
+                 <Skeleton className="h-4 w-40" />
+              </div>
+              <div className="space-y-3">
+                 <Skeleton className="h-4 w-20" />
+                 <Skeleton className="h-10 w-full" />
+                 <Skeleton className="h-10 w-32 mt-2" />
+              </div>
+           </div>
+        </div>
       </div>
     )
   }
@@ -78,12 +100,12 @@ export function ProfilePage() {
 
   return (
     <div className="mx-auto max-w-2xl space-y-5">
-      <div className="space-y-1">
-        <h1 className="font-heading text-3xl tracking-tight">Profile</h1>
-        <p className="text-sm text-muted-foreground">
+      <PageHeader>
+        <PageHeaderHeading>Profile</PageHeaderHeading>
+        <PageHeaderDescription>
           Identity, linked wallets, and session.
-        </p>
-      </div>
+        </PageHeaderDescription>
+      </PageHeader>
 
       <Card>
         <CardHeader className="pb-3">

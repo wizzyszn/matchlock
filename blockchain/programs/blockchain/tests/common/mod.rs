@@ -1,8 +1,8 @@
 use anchor_lang::{AccountDeserialize, InstructionData, ToAccountMetas};
 use blockchain::{
-    constants::{CONFIG_SEED, VAULT_SEED, WAGER_SEED, WALLET_PROFILE_SEED},
+    constants::{CONFIG_SEED, MATCH_STATE_SEED, VAULT_SEED, WAGER_SEED, WALLET_PROFILE_SEED},
     cpi::ValidateStatArgs,
-    state::{Config, Side, Wager, WagerStatus, WalletProfile},
+    state::{Config, MatchState, Side, Wager, WagerStatus, WalletProfile},
 };
 use litesvm::LiteSVM;
 use solana_account::Account;
@@ -22,6 +22,7 @@ use spl_token_interface::{
     state::Account as TokenAccountState,
     ID as TOKEN_PROGRAM_ID,
 };
+use std::{fs, path::PathBuf};
 
 pub const ATA_PROGRAM_ID: Address = ata_program_id();
 
@@ -43,17 +44,11 @@ impl TestEnv {
         let mut svm = LiteSVM::new();
         let program_id = blockchain::id();
 
-        let blockchain_bytes = include_bytes!(concat!(
-            env!("CARGO_TARGET_TMPDIR"),
-            "/../deploy/blockchain.so"
-        ));
-        let txline_bytes = include_bytes!(concat!(
-            env!("CARGO_TARGET_TMPDIR"),
-            "/../deploy/txline_mock.so"
-        ));
+        let blockchain_bytes = read_deploy_so("blockchain.so");
+        let txline_bytes = read_deploy_so("txline_mock.so");
 
-        svm.add_program(program_id, blockchain_bytes).unwrap();
-        svm.add_program(TXLINE_MOCK_PROGRAM_ID, txline_bytes)
+        svm.add_program(program_id, &blockchain_bytes).unwrap();
+        svm.add_program(TXLINE_MOCK_PROGRAM_ID, &txline_bytes)
             .unwrap();
 
         let authority = Keypair::new();
@@ -202,6 +197,34 @@ impl TestEnv {
         (wager, vault)
     }
 
+    pub fn match_state_pda(&self, match_id: &[u8]) -> Address {
+        let (match_state, _) =
+            Address::find_program_address(&[MATCH_STATE_SEED, match_id], &blockchain::id());
+        match_state
+    }
+
+    pub fn init_match_state(&mut self) -> Address {
+        let match_state = self.match_state_pda(&self.match_id);
+        if self.svm.get_account(&match_state).is_some() {
+            return match_state;
+        }
+        let ix = Instruction::new_with_bytes(
+            blockchain::id(),
+            &blockchain::instruction::InitMatchState {
+                match_id: self.match_id.clone(),
+            }
+            .data(),
+            blockchain::accounts::InitMatchState {
+                payer: self.authority.pubkey(),
+                match_state,
+                system_program: solana_system_interface::program::ID,
+            }
+            .to_account_metas(None),
+        );
+        self.send(&[self.authority.insecure_clone()], &[ix]);
+        match_state
+    }
+
     pub fn get<T: AccountDeserialize>(&self, key: &Address) -> T {
         let account = self.svm.get_account(key).expect("missing account");
         let mut data: &[u8] = &account.data;
@@ -244,6 +267,7 @@ impl TestEnv {
     ) -> (Address, Address) {
         let maker = self.maker.pubkey();
         let (wager, vault) = self.wager_pdas(&maker, &self.match_id, nonce);
+        let match_state = self.init_match_state();
         let maker_ata = get_associated_token_address(&maker, &self.mint);
 
         let ix = Instruction::new_with_bytes(
@@ -261,6 +285,7 @@ impl TestEnv {
                 maker,
                 config: self.config,
                 wager,
+                match_state,
                 vault,
                 maker_stablecoin: maker_ata,
                 stablecoin_mint: self.mint,
@@ -282,6 +307,7 @@ impl TestEnv {
     pub fn accept_wager(&mut self, wager: Address, vault: Address, taker_side: Side) {
         let maker = self.maker.pubkey();
         let taker = self.taker.pubkey();
+        let match_state = self.match_state_pda(&self.match_id);
         let taker_ata = get_associated_token_address(&taker, &self.mint);
 
         let ix = Instruction::new_with_bytes(
@@ -291,6 +317,7 @@ impl TestEnv {
                 taker,
                 config: self.config,
                 wager,
+                match_state,
                 maker,
                 taker_stablecoin: taker_ata,
                 vault,
@@ -298,6 +325,7 @@ impl TestEnv {
                 taker_wallet_profile: self.wallet_profile_pda(&taker),
                 token_program: TOKEN_PROGRAM_ID,
                 associated_token_program: ATA_PROGRAM_ID,
+                system_program: solana_system_interface::program::ID,
             }
             .to_account_metas(None),
         );
@@ -307,6 +335,28 @@ impl TestEnv {
         assert_eq!(w.status, WagerStatus::Matched);
         assert_eq!(w.taker, taker);
         assert_eq!(w.taker_side, taker_side);
+    }
+
+    pub fn close_match(&mut self) {
+        let match_state = self.match_state_pda(&self.match_id);
+        let ix = Instruction::new_with_bytes(
+            blockchain::id(),
+            &blockchain::instruction::CloseMatch {
+                match_id: self.match_id.clone(),
+            }
+            .data(),
+            blockchain::accounts::CloseMatch {
+                authority: self.authority.pubkey(),
+                config: self.config,
+                match_state,
+                system_program: solana_system_interface::program::ID,
+            }
+            .to_account_metas(None),
+        );
+        self.send(&[self.authority.insecure_clone()], &[ix]);
+
+        let state: MatchState = self.get(&match_state);
+        assert!(state.is_closed);
     }
 
     pub fn cancel_wager(&mut self, wager: Address, vault: Address) {
@@ -474,4 +524,23 @@ impl TestEnv {
         );
         self.send(&[self.authority.insecure_clone()], &[ix]);
     }
+}
+
+fn read_deploy_so(name: &str) -> Vec<u8> {
+    let path = deploy_so_path(name);
+    fs::read(&path).unwrap_or_else(|err| {
+        panic!(
+            "failed to read {}: {err}; run `cd blockchain && NO_DNA=1 anchor build` first",
+            path.display()
+        )
+    })
+}
+
+fn deploy_so_path(name: &str) -> PathBuf {
+    PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+        .join("..")
+        .join("..")
+        .join("target")
+        .join("deploy")
+        .join(name)
 }

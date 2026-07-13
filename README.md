@@ -2,7 +2,7 @@
 
 *Peer-to-peer sports wagering on Solana.*
 
-You pick a match, pick a side, stake some USDC. Someone on the other side picks the opposite. When the game ends, the winner claims the pot — settled by verifiable proofs from the TxLINE oracle. No house, no spread, no funny business.
+You pick a match, pick a side, stake some USDT. Someone on the other side picks the opposite. When the game ends, the winner claims the pot — settled by verifiable proofs from the TxLINE oracle. No house, no spread, no funny business.
 
 Built for the Solana + TxLINE hackathon.
 
@@ -58,7 +58,7 @@ The browser talks to the keeper, not to TxLINE. API tokens stay server-side. The
 
 The on-chain escrow. Instructions in `src/instructions/`:
 
-- `make_wager` — create a wager, stake USDC into a PDA vault
+- `make_wager` — create a wager, stake USDT into a PDA vault
 - `accept_wager` — match an open wager, stake the opposite side
 - `settle_wager` — winner or keeper submits a TxLINE Merkle proof, vault pays out
 - `cancel_wager` — maker pulls the wager back (only while Open)
@@ -178,7 +178,7 @@ cd frontend-react && pnpm run build
 |-------|---------|
 | Matchlock program | `7jbdwJLrePo6dr6Jo5sSmK4RQC5tYRrGebnkMFTuPGq5` |
 | Config PDA | `FU8myLVAMXBZfsEE9PbpmRmeqR8R82NR2gYGphqjcqcS` |
-| USDC (TxLINE devnet) | `ELWTKspHKCnCfCiCiqYw1EDH77k8VCP74dK9qytG2Ujh` |
+| USDT (TxLINE devnet) | `ELWTKspHKCnCfCiCiqYw1EDH77k8VCP74dK9qytG2Ujh` |
 | TxLINE oracle program | `6pW64gN1s2uqjHkn1unFeEjAwJkPGHoppGvS715wyP2J` |
 
 ---

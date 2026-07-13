@@ -150,6 +150,7 @@ func (s *snapshotTxline) FetchScoreSnapshot(ctx context.Context, fixtureID int64
 }
 
 type fakeSolana struct {
+	closeCalls      int
 	settleCalls     int
 	lastWinningSide uint8
 	lastWagerPubkey string
@@ -202,6 +203,13 @@ func (f *fakeSolana) SettleWager(ctx context.Context, p solanapkg.SettleParams) 
 	}
 	var sig solana.Signature
 	sig[0] = 1
+	return sig, nil
+}
+
+func (f *fakeSolana) CloseMatch(ctx context.Context, keeperKey solana.PrivateKey, matchID string) (solana.Signature, error) {
+	f.closeCalls++
+	var sig solana.Signature
+	sig[0] = 2
 	return sig, nil
 }
 
@@ -462,6 +470,47 @@ func TestReconcileRefreshesInferredFinalWithoutAutoSettle(t *testing.T) {
 	}
 	if got.HomeGoals == nil || *got.HomeGoals != 2 {
 		t.Fatalf("home goals = %#v", got.HomeGoals)
+	}
+	if sc.settleCalls != 0 {
+		t.Fatalf("settle calls = %d, want 0", sc.settleCalls)
+	}
+}
+
+func TestReconcileRefreshesEligibleNonFinalWithoutAutoSettle(t *testing.T) {
+	c := newMemCache()
+	kickoff := time.Now().Add(-2 * time.Hour).UnixMilli()
+	c.matches["18213979"] = cache.Match{
+		MatchID:   "18213979",
+		FixtureID: 18213979,
+		GameState: "HT",
+		StartTime: kickoff,
+		Seq:       77,
+	}
+	tx := &snapshotTxline{rows: []txline.ScoreSnapshotRow{{
+		FixtureID:          18213979,
+		GameState:          "HT",
+		Seq:                77,
+		Participant1IsHome: true,
+		ScoreSoccer: &txline.SoccerFixtureScore{
+			Participant1: txline.SoccerTotalScore{Goals: 1},
+			Participant2: txline.SoccerTotalScore{Goals: 1},
+		},
+	}}}
+	sc := &fakeSolana{}
+	w := &Worker{Cache: c, Txline: tx, Solana: sc, AutoSettle: false}
+
+	if err := w.ReconcileFinalMatches(context.Background()); err != nil {
+		t.Fatalf("ReconcileFinalMatches: %v", err)
+	}
+	got, err := c.GetMatch(context.Background(), "18213979")
+	if err != nil {
+		t.Fatalf("GetMatch: %v", err)
+	}
+	if got.IsFinal {
+		t.Fatalf("live match was incorrectly finalized: %#v", got)
+	}
+	if got.GameState != "HT" || got.Seq != 77 {
+		t.Fatalf("live state changed unexpectedly: %#v", got)
 	}
 	if sc.settleCalls != 0 {
 		t.Fatalf("settle calls = %d, want 0", sc.settleCalls)

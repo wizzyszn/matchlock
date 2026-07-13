@@ -1,11 +1,12 @@
 import { useWallet } from '@solana/wallet-adapter-react'
-import { ArrowLeft, ExternalLink, Loader2, Swords, Clock } from 'lucide-react'
+import { ArrowLeft, ExternalLink, Swords, Clock } from 'lucide-react'
 import { useCallback, useMemo, useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
 import { toast } from 'sonner'
 
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
+import { Skeleton } from '@/components/ui/skeleton'
 import { ConfirmTxDialog, type ConfirmTxDetails } from '@/components/wager/confirm-tx-dialog'
 import { DuelFrame } from '@/components/wager/duel-frame'
 import { OutcomePicker } from '@/components/wager/outcome-picker'
@@ -19,8 +20,8 @@ import { useStablecoinLabel } from '@/hooks/use-stablecoin-label'
 import { useTxFeeEstimate } from '@/hooks/use-tx-fee-estimate'
 import { useWagerTxBuilders } from '@/hooks/use-wager-tx-builders'
 import type { Side } from '@/lib/api'
-import { baseUnitsToUsdc, formatStakeBaseUnits, truncateAddress, explorerAddressUrl } from '@/lib/format'
-import { matchLabels } from '@/lib/match-display'
+import { baseUnitsToUsdt, formatStakeBaseUnits, truncateAddress, explorerAddressUrl } from '@/lib/format'
+import { classifyMatch, matchLabels } from '@/lib/match-display'
 import { sideLabel, availableTakerSides, defaultTakerSide } from '@/lib/wager-sides'
 import { canClaimWinnings } from '@/lib/wager-outcome'
 import { isPlaceholderAddress } from '@/lib/accounts'
@@ -48,6 +49,7 @@ export function WagerDetailPage() {
   )
 
   const labels = match ? matchLabels(match) : null
+  const wageringClosed = match ? classifyMatch(match) === 'finished' : false
 
   const isMaker = walletAddress ? wager?.maker === walletAddress : false
   const canCancel = Boolean(isMaker && wager?.status === 'open')
@@ -79,7 +81,7 @@ export function WagerDetailPage() {
 
   const [dialogOpen, setDialogOpen] = useState(false)
   const [confirmDetails, setConfirmDetails] = useState<ConfirmTxDetails | null>(null)
-  const [acceptTarget, setAcceptTarget] = useState<{ wagerPubkey: string; maker: string; takerSide: Side } | null>(null)
+  const [acceptTarget, setAcceptTarget] = useState<{ wagerPubkey: string; maker: string; takerSide: Side; matchId: string } | null>(null)
   const [txError, setTxError] = useState<string | null>(null)
   const [signature, setSignature] = useState<string | null>(null)
 
@@ -89,7 +91,7 @@ export function WagerDetailPage() {
       action: 'cancel',
       matchLabel: labels?.league ?? `Match ${wager.match_id}`,
       sideLabel: '—',
-      stakeUsdc: baseUnitsToUsdc(wager.stake),
+      stakeUsdt: baseUnitsToUsdt(wager.stake),
     })
     setTxError(null)
     setSignature(null)
@@ -102,8 +104,8 @@ export function WagerDetailPage() {
       action: 'claim',
       matchLabel: labels?.league ?? `Match ${wager.match_id}`,
       sideLabel: backedLabel,
-      stakeUsdc: baseUnitsToUsdc(wager.stake),
-      payoutUsdc: baseUnitsToUsdc(wager.stake * 2),
+      stakeUsdt: baseUnitsToUsdt(wager.stake),
+      payoutUsdt: baseUnitsToUsdt(wager.stake * 2),
     })
     setTxError(null)
     setSignature(null)
@@ -113,13 +115,13 @@ export function WagerDetailPage() {
   const openAccept = (takerSide: Side) => {
     if (!wager) return
     const outcomeLabel = match ? sideLabel(takerSide, match) : takerSide
-    setAcceptTarget({ wagerPubkey: wager.pubkey, maker: wager.maker, takerSide })
+    setAcceptTarget({ wagerPubkey: wager.pubkey, maker: wager.maker, takerSide, matchId: wager.match_id })
     setConfirmDetails({
       action: 'accept',
       matchLabel: labels?.league ?? `Match ${wager.match_id}`,
       sideLabel: outcomeLabel,
-      stakeUsdc: baseUnitsToUsdc(wager.stake),
-      payoutUsdc: baseUnitsToUsdc(wager.stake * 2),
+      stakeUsdt: baseUnitsToUsdt(wager.stake),
+      payoutUsdt: baseUnitsToUsdt(wager.stake * 2),
     })
     setTxError(null)
     setSignature(null)
@@ -178,9 +180,43 @@ export function WagerDetailPage() {
 
   if (isLoading) {
     return (
-      <div className="flex items-center gap-2 text-sm text-muted-foreground">
-        <Loader2 className="size-4 animate-spin" />
-        Loading wager…
+      <div className="mx-auto max-w-2xl space-y-6">
+        <div className="inline-flex items-center gap-1.5 text-sm text-muted-foreground">
+          <ArrowLeft className="size-4" aria-hidden />
+          Back to My wagers
+        </div>
+
+        <Card className="overflow-hidden">
+          <CardContent className="space-y-5 p-6">
+            <div className="flex items-start justify-between gap-3">
+              <Skeleton className="h-5 w-32" />
+              <Skeleton className="h-5 w-16 rounded-full" />
+            </div>
+
+            <div className="flex min-w-0 items-center gap-2 mt-4">
+              <Skeleton className="h-4 w-24" />
+            </div>
+            
+            <div className="flex items-center justify-between gap-4 py-4">
+               <div className="space-y-2 flex-1 items-center flex flex-col">
+                  <Skeleton className="size-16 rounded-full" />
+                  <Skeleton className="h-4 w-20" />
+               </div>
+               <Skeleton className="h-4 w-6" />
+               <div className="space-y-2 flex-1 items-center flex flex-col">
+                  <Skeleton className="size-16 rounded-full" />
+                  <Skeleton className="h-4 w-20" />
+               </div>
+            </div>
+
+            <div className="grid gap-3 rounded-lg bg-muted/40 px-4 py-3.5 mt-2">
+               <div className="flex justify-between">
+                  <Skeleton className="h-4 w-24" />
+                  <Skeleton className="h-4 w-16" />
+               </div>
+            </div>
+          </CardContent>
+        </Card>
       </div>
     )
   }
@@ -349,7 +385,7 @@ export function WagerDetailPage() {
               />
               <Button
                 className="min-h-12 w-full text-base"
-                disabled={!walletAddress || pending}
+                disabled={!walletAddress || pending || wageringClosed}
                 onClick={() => openAccept(takerSide)}
               >
                 Accept challenge

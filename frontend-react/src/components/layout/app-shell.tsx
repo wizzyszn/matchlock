@@ -1,11 +1,12 @@
 import { NavLink } from "react-router-dom";
-import type { ReactNode } from "react";
+import { useState, type ReactNode } from "react";
+import { Info, X } from "lucide-react";
 
 import { PoweredByTxLine } from "@/components/brand/powered-by-txline";
 import logoUrl from "@/assets/g17.svg";
 import { UserAccountMenu } from "@/components/auth/user-account-menu";
 import { ClusterBadge } from "@/components/wallet/ClusterBadge";
-import { WalletConnectWarningBanner } from "@/components/wallet/wallet-connect-warning-banner";
+import { useSessionQuery } from "@/hooks/queries/use-session";
 import { cn } from "@/lib/utils";
 import { buttonVariants } from "@/components/ui/button";
 
@@ -26,8 +27,32 @@ export interface AppShellProps {
 }
 
 export function AppShell({ children }: AppShellProps) {
+  const [dismissed, setDismissed] = useState(false);
+  const { data: session } = useSessionQuery();
+
+  const hasLinkedWallet = Boolean(session?.wallets?.length);
+  const showBanner = session != null && !hasLinkedWallet && !dismissed;
+
   return (
     <div className="flex min-h-svh flex-col bg-background">
+      {showBanner && (
+        <div className="bg-status-open px-4 py-2.5 text-primary-foreground relative text-center text-sm font-medium z-50">
+          <div className="mx-auto flex max-w-5xl items-center justify-center gap-2 pr-8">
+            <Info className="size-4 shrink-0" aria-hidden />
+            <span>
+              Please head to your <NavLink to="/profile" className="underline underline-offset-2 font-semibold hover:text-primary-foreground/80">profile settings</NavLink> to connect and link a wallet so you can place wagers.
+            </span>
+          </div>
+          <button 
+            type="button" 
+            onClick={() => setDismissed(true)} 
+            className="absolute right-4 top-1/2 -translate-y-1/2 rounded-full p-1 opacity-80 hover:bg-primary-foreground/20 hover:opacity-100 transition-colors"
+            aria-label="Dismiss banner"
+          >
+            <X className="size-4" />
+          </button>
+        </div>
+      )}
       <header className="sticky top-0 z-50 border-b bg-background/95 backdrop-blur-sm">
         <div className="mx-auto flex max-w-5xl items-center justify-between gap-4 px-4 py-4">
           <div className="flex min-w-0 items-center gap-2 sm:gap-3">
@@ -77,8 +102,6 @@ export function AppShell({ children }: AppShellProps) {
             ))}
           </ul>
         </nav>
-
-        <WalletConnectWarningBanner />
       </header>
 
       <main className="flex-1 mx-auto max-w-5xl px-4 py-8 sm:py-12 w-full">{children}</main>

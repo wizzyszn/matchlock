@@ -40,4 +40,6 @@ pub enum ErrorCode {
     InvalidWallet,
     #[msg("Contract is paused — this action is currently disabled")]
     ContractPaused,
+    #[msg("This match is closed for wagering")]
+    MatchClosed,
 }

@@ -44,6 +44,19 @@ type SoccerFixtureScore struct {
 type SoccerFixtureClock struct {
 	Running bool  `json:"running"`
 	Seconds int32 `json:"seconds"`
+	RunningAlt bool `json:"Running"`
+	SecondsAlt int32 `json:"Seconds"`
+}
+
+func (c SoccerFixtureClock) IsRunning() bool {
+	return c.Running || c.RunningAlt
+}
+
+func (c SoccerFixtureClock) ElapsedSeconds() int32 {
+	if c.Seconds != 0 {
+		return c.Seconds
+	}
+	return c.SecondsAlt
 }
 
 // SoccerData is an in-play soccer event payload.
@@ -94,4 +107,3 @@ type UsFootballFixtureClock struct {
 	Running bool  `json:"running"`
 	Seconds int32 `json:"seconds"`
 }
-

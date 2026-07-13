@@ -1,7 +1,7 @@
 import type { Cluster } from '@/lib/config'
 import { explorerClusterParam } from '@/lib/config'
 
-const USDC_DECIMALS = 6
+const USDT_DECIMALS = 6
 const LAMPORTS_PER_SOL = 1_000_000_000
 
 export function truncateAddress(address: string, chars = 4): string {
@@ -9,15 +9,15 @@ export function truncateAddress(address: string, chars = 4): string {
   return `${address.slice(0, chars)}…${address.slice(-chars)}`
 }
 
-export function baseUnitsToUsdc(amount: number | bigint): number {
-  return Number(amount) / 10 ** USDC_DECIMALS
+export function baseUnitsToUsdt(amount: number | bigint): number {
+  return Number(amount) / 10 ** USDT_DECIMALS
 }
 
-export function usdcToBaseUnits(amount: number): bigint {
-  return BigInt(Math.round(amount * 10 ** USDC_DECIMALS))
+export function usdtToBaseUnits(amount: number): bigint {
+  return BigInt(Math.round(amount * 10 ** USDT_DECIMALS))
 }
 
-export function formatUsdc(amount: number, options?: { maxDecimals?: number }): string {
+export function formatUsdt(amount: number, options?: { maxDecimals?: number }): string {
   const maxDecimals = options?.maxDecimals ?? 6
   return amount.toLocaleString('en-US', {
     minimumFractionDigits: 0,
@@ -26,7 +26,7 @@ export function formatUsdc(amount: number, options?: { maxDecimals?: number }): 
 }
 
 export function formatStakeBaseUnits(stake: number): string {
-  return formatUsdc(baseUnitsToUsdc(stake), { maxDecimals: 6 })
+  return formatUsdt(baseUnitsToUsdt(stake), { maxDecimals: 6 })
 }
 
 export function formatSol(

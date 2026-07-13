@@ -1,19 +1,15 @@
 import { MatchBrowser } from '@/components/wager/match-browser'
+import { PageHeader, PageHeaderHeading, PageHeaderDescription } from '@/components/ui/page-header'
 
 export function MarketsPage() {
   return (
     <section aria-labelledby="markets-heading">
-      <div className="mb-8">
-        <h2
-          id="markets-heading"
-          className="font-heading text-3xl leading-tight sm:text-4xl"
-        >
-          Markets
-        </h2>
-        <p className="mt-2 max-w-prose text-sm text-muted-foreground">
+      <PageHeader>
+        <PageHeaderHeading id="markets-heading">Markets</PageHeaderHeading>
+        <PageHeaderDescription>
           Tap a 1-X-2 odds cell or the challenge icon to open a PvP wager slip.
-        </p>
-      </div>
+        </PageHeaderDescription>
+      </PageHeader>
       <MatchBrowser />
     </section>
   )

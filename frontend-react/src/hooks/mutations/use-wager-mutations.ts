@@ -5,12 +5,13 @@ import { PublicKey } from "@solana/web3.js";
 import { useConfig } from "@/hooks/use-api";
 import type { Side, Wager, WagerStatus, WagerSettlementStatus } from "@/lib/api";
 import { mapTransactionError } from "@/lib/errors";
-import { getProgram, getUsdcMint } from "@/lib/anchor";
+import { getProgram, getUsdtMint } from "@/lib/anchor";
 import { queryKeys } from "@/lib/query-keys";
 
 import { useApi } from "@/hooks/use-api";
 import { useWalletLinkStatus } from "@/hooks/use-wallet-link-status";
 import { useOptimisticWagersStore } from "@/stores/optimistic-wagers-store";
+import { classifyMatch } from "@/lib/match-display";
 import {
   buildAcceptWagerTransaction,
   buildCancelWagerTransaction,
@@ -48,6 +49,14 @@ export function useWagerMutations() {
   const api = useApi();
   const queryClient = useQueryClient();
   const optimisticWagers = useOptimisticWagersStore();
+
+  const assertMatchOpenForWagering = async (matchId: string) => {
+    const match = await api.getMatch(matchId);
+    if (classifyMatch(match) === "finished") {
+      throw new Error("This fixture is already finished. Wagering is closed.");
+    }
+    return match;
+  };
 
   const invalidateWagers = async () => {
     await queryClient.invalidateQueries({ queryKey: ["wagers"] });
@@ -106,7 +115,8 @@ export function useWagerMutations() {
         );
       }
       const program = getProgram(connection, wallet);
-      const stablecoinMint = getUsdcMint(config);
+      const stablecoinMint = getUsdtMint(config);
+      const match = await assertMatchOpenForWagering(input.matchId);
 
       const { tx, wagerPubkey } = await buildMakeWagerTransaction({
         program,
@@ -115,7 +125,7 @@ export function useWagerMutations() {
         matchId: input.matchId,
         stake: input.stake,
         makerSide: input.makerSide,
-        participant1IsHome: input.participant1IsHome,
+        participant1IsHome: match.participant1_is_home,
         stablecoinMint,
         invitedTaker: input.invitedTaker,
       });
@@ -152,6 +162,7 @@ export function useWagerMutations() {
       wagerPubkey: string;
       maker: string;
       takerSide: Side;
+      matchId: string;
     }) => {
       if (!wallet?.publicKey) {
         throw new Error("Connect your wallet on Profile first.");
@@ -167,13 +178,15 @@ export function useWagerMutations() {
         );
       }
       const program = getProgram(connection, wallet);
-      const stablecoinMint = getUsdcMint(config);
+      const stablecoinMint = getUsdtMint(config);
+      await assertMatchOpenForWagering(input.matchId);
 
       const tx = await buildAcceptWagerTransaction({
         program,
         wallet,
         wagerPubkey: new PublicKey(input.wagerPubkey),
         maker: new PublicKey(input.maker),
+        matchId: input.matchId,
         takerSide: input.takerSide,
         stablecoinMint,
       });
@@ -200,7 +213,7 @@ export function useWagerMutations() {
         );
       }
       const program = getProgram(connection, wallet);
-      const stablecoinMint = getUsdcMint(config);
+      const stablecoinMint = getUsdtMint(config);
 
       const tx = await buildCancelWagerTransaction({
         program,
@@ -266,7 +279,7 @@ export function useWagerMutations() {
       }
       const proof = await api.getWagerSettlementProof(input.wagerPubkey);
       const program = getProgram(connection, wallet);
-      const stablecoinMint = getUsdcMint(config);
+      const stablecoinMint = getUsdtMint(config);
 
       const tx = await buildClaimWagerTransaction({
         program,

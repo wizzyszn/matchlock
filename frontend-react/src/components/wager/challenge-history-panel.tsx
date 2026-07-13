@@ -2,7 +2,6 @@ import { useWallet } from '@solana/wallet-adapter-react'
 import {
   ChevronLeft,
   ChevronRight,
-  Loader2,
   Swords,
   User,
 } from 'lucide-react'
@@ -11,6 +10,7 @@ import { useNavigate } from 'react-router-dom'
 
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
+import { Skeleton } from '@/components/ui/skeleton'
 import { useWagerHistoryQuery } from '@/hooks/queries/use-wagers'
 import { useStablecoinLabel } from '@/hooks/use-stablecoin-label'
 import type { WagerHistoryEntry } from '@/lib/api'
@@ -397,9 +397,42 @@ export function ChallengeHistoryPanel() {
 
       {/* --- Content --- */}
       {isLoading ? (
-        <div className="flex items-center justify-center gap-2 py-16 text-sm text-muted-foreground">
-          <Loader2 className="size-4 animate-spin" />
-          Loading history…
+        <div className="overflow-x-auto rounded-lg border">
+          <table className="w-full table-auto border-collapse text-sm">
+            <thead>
+              <tr className="border-b bg-muted/30 text-xs font-medium text-muted-foreground">
+                <th className="px-3 py-3 text-left font-medium">Match</th>
+                <th className="px-3 py-3 text-left font-medium max-sm:hidden">Pick</th>
+                <th className="px-3 py-3 text-right font-medium">Stake</th>
+                <th className="px-3 py-3 text-right font-medium max-sm:hidden">Result</th>
+                <th className="px-3 py-3 text-center font-medium">Status</th>
+              </tr>
+            </thead>
+            <tbody>
+              {[1, 2, 3, 4, 5].map((i) => (
+                <tr key={i} className="border-b border-border/50 last:border-b-0">
+                  <td className="px-3 py-3">
+                    <div className="space-y-2">
+                       <Skeleton className="h-4 w-40" />
+                       <Skeleton className="h-3 w-32" />
+                    </div>
+                  </td>
+                  <td className="px-3 py-3 max-sm:hidden">
+                    <Skeleton className="h-4 w-12" />
+                  </td>
+                  <td className="px-3 py-3">
+                    <div className="flex justify-end"><Skeleton className="h-4 w-16" /></div>
+                  </td>
+                  <td className="px-3 py-3 max-sm:hidden">
+                    <div className="flex justify-end"><Skeleton className="h-4 w-16" /></div>
+                  </td>
+                  <td className="px-3 py-3">
+                    <div className="flex justify-center"><Skeleton className="h-5 w-16 rounded-full" /></div>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
         </div>
       ) : entries.length === 0 ? (
         <div className="rounded-lg border border-dashed bg-muted/40 px-6 py-12 text-center">

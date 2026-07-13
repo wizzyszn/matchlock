@@ -34,6 +34,10 @@ pub mod blockchain {
         instructions::register_wallet::handle_register_wallet(ctx, wallet, user_id_hash)
     }
 
+    pub fn init_match_state(ctx: Context<InitMatchState>, match_id: Vec<u8>) -> Result<()> {
+        instructions::init_match_state::handle_init_match_state(ctx, match_id)
+    }
+
     pub fn unregister_wallet(ctx: Context<UnregisterWallet>, wallet: Pubkey) -> Result<()> {
         instructions::unregister_wallet::handle_unregister_wallet(ctx, wallet)
     }
@@ -60,6 +64,10 @@ pub mod blockchain {
 
     pub fn accept_wager(ctx: Context<AcceptWager>, taker_side: Side) -> Result<()> {
         instructions::accept_wager::handle_accept_wager(ctx, taker_side)
+    }
+
+    pub fn close_match(ctx: Context<CloseMatch>, match_id: Vec<u8>) -> Result<()> {
+        instructions::close_match::handle_close_match(ctx, match_id)
     }
 
     pub fn cancel_wager(ctx: Context<CancelWager>) -> Result<()> {

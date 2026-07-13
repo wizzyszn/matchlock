@@ -7,7 +7,7 @@ const envSchema = z.object({
   VITE_PROGRAM_ID: z.string().min(32),
   VITE_BACKEND_URL: z.url(),
   VITE_CLUSTER: clusterSchema,
-  VITE_USDC_MINT: z.string().min(32),
+  VITE_USDT_MINT: z.string().min(32),
 })
 
 export type Cluster = z.infer<typeof clusterSchema>
@@ -17,7 +17,7 @@ export type AppConfig = {
   programId: string
   backendUrl: string
   cluster: Cluster
-  usdcMint: string
+  usdtMint: string
 }
 
 export type ConfigResult =
@@ -51,7 +51,7 @@ export function tryLoadConfig(): ConfigResult {
       programId: env.VITE_PROGRAM_ID,
       backendUrl: env.VITE_BACKEND_URL,
       cluster: env.VITE_CLUSTER,
-      usdcMint: env.VITE_USDC_MINT,
+      usdtMint: env.VITE_USDT_MINT,
     },
   }
 }

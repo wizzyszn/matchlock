@@ -2,6 +2,7 @@ package solana
 
 import (
 	"context"
+	"crypto/sha256"
 	"encoding/binary"
 	"fmt"
 	"strconv"
@@ -17,6 +18,7 @@ var (
 	acceptWagerDiscriminator    = [8]byte{214, 18, 178, 214, 203, 22, 50, 119}
 	cancelWagerDiscriminator    = [8]byte{57, 92, 124, 123, 216, 16, 37, 148}
 	faucetDiscriminator         = [8]byte{49, 178, 104, 8, 23, 120, 186, 21}
+	closeMatchDiscriminator     = anchorDiscriminator("close_match")
 	registerWalletDiscriminator = [8]byte{181, 141, 102, 82, 135, 213, 141, 8}
 )
 
@@ -66,6 +68,22 @@ func EncodeCancelWagerData() []byte {
 	return cancelWagerDiscriminator[:]
 }
 
+func EncodeCloseMatchData(matchID []byte) ([]byte, error) {
+	if len(matchID) == 0 || len(matchID) > 32 {
+		return nil, fmt.Errorf("match_id length %d out of range", len(matchID))
+	}
+	if _, err := strconv.ParseInt(string(matchID), 10, 64); err != nil {
+		return nil, fmt.Errorf("match_id must be a numeric fixture id")
+	}
+	buf := make([]byte, 0, len(closeMatchDiscriminator)+4+len(matchID))
+	buf = append(buf, closeMatchDiscriminator[:]...)
+	var lenLE [4]byte
+	binary.LittleEndian.PutUint32(lenLE[:], uint32(len(matchID)))
+	buf = append(buf, lenLE[:]...)
+	buf = append(buf, matchID...)
+	return buf, nil
+}
+
 type MakeWagerParams struct {
 	Maker              solana.PrivateKey
 	MatchID            string
@@ -86,11 +104,19 @@ func (c *Client) MakeWager(ctx context.Context, p MakeWagerParams) (solana.Publi
 	if err != nil {
 		return solana.PublicKey{}, solana.Signature{}, err
 	}
+	matchStatePDA, _, err := FindMatchStatePDA(c.programID, matchBytes)
+	if err != nil {
+		return solana.PublicKey{}, solana.Signature{}, err
+	}
 	vaultPDA, _, err := FindVaultPDA(c.programID, wagerPDA)
 	if err != nil {
 		return solana.PublicKey{}, solana.Signature{}, err
 	}
 	makerATA, _, err := solana.FindAssociatedTokenAddress(p.Maker.PublicKey(), c.mint)
+	if err != nil {
+		return solana.PublicKey{}, solana.Signature{}, err
+	}
+	makerWalletProfile, _, err := FindWalletProfilePDA(c.programID, p.Maker.PublicKey())
 	if err != nil {
 		return solana.PublicKey{}, solana.Signature{}, err
 	}
@@ -104,9 +130,11 @@ func (c *Client) MakeWager(ctx context.Context, p MakeWagerParams) (solana.Publi
 		solana.Meta(p.Maker.PublicKey()).SIGNER().WRITE(),
 		solana.Meta(configPDA),
 		solana.Meta(wagerPDA).WRITE(),
+		solana.Meta(matchStatePDA).WRITE(),
 		solana.Meta(vaultPDA).WRITE(),
 		solana.Meta(makerATA).WRITE(),
 		solana.Meta(c.mint),
+		solana.Meta(makerWalletProfile),
 		solana.Meta(token.ProgramID),
 		solana.Meta(associatedtokenaccount.ProgramID),
 		solana.Meta(solana.SystemProgramID),
@@ -166,7 +194,19 @@ func (c *Client) AcceptWager(ctx context.Context, p AcceptWagerParams) (solana.S
 	if err != nil {
 		return solana.Signature{}, err
 	}
+	wager, err := c.GetWager(ctx, p.Wager)
+	if err != nil {
+		return solana.Signature{}, fmt.Errorf("get wager: %w", err)
+	}
+	matchStatePDA, _, err := FindMatchStatePDA(c.programID, []byte(wager.MatchIDString()))
+	if err != nil {
+		return solana.Signature{}, err
+	}
 	takerATA, _, err := solana.FindAssociatedTokenAddress(p.Taker.PublicKey(), c.mint)
+	if err != nil {
+		return solana.Signature{}, err
+	}
+	takerWalletProfile, _, err := FindWalletProfilePDA(c.programID, p.Taker.PublicKey())
 	if err != nil {
 		return solana.Signature{}, err
 	}
@@ -175,15 +215,44 @@ func (c *Client) AcceptWager(ctx context.Context, p AcceptWagerParams) (solana.S
 		solana.Meta(p.Taker.PublicKey()).SIGNER().WRITE(),
 		solana.Meta(configPDA),
 		solana.Meta(p.Wager).WRITE(),
+		solana.Meta(matchStatePDA).WRITE(),
 		solana.Meta(p.Maker),
 		solana.Meta(takerATA).WRITE(),
 		solana.Meta(vaultPDA).WRITE(),
 		solana.Meta(c.mint),
+		solana.Meta(takerWalletProfile),
 		solana.Meta(token.ProgramID),
 		solana.Meta(associatedtokenaccount.ProgramID),
+		solana.Meta(solana.SystemProgramID),
 	}
 	ix := solana.NewInstruction(c.programID, accounts, EncodeAcceptWagerData(p.TakerSide))
 	_, sig, err := c.sendSigned(ctx, p.Taker, []solana.Instruction{ix})
+	return sig, err
+}
+
+func (c *Client) CloseMatch(ctx context.Context, keeperKey solana.PrivateKey, matchID string) (solana.Signature, error) {
+	matchBytes := []byte(matchID)
+	configPDA, _, err := FindConfigPDA(c.programID)
+	if err != nil {
+		return solana.Signature{}, err
+	}
+	matchStatePDA, _, err := FindMatchStatePDA(c.programID, matchBytes)
+	if err != nil {
+		return solana.Signature{}, err
+	}
+	ixData, err := EncodeCloseMatchData(matchBytes)
+	if err != nil {
+		return solana.Signature{}, err
+	}
+
+	accounts := solana.AccountMetaSlice{
+		solana.Meta(keeperKey.PublicKey()).SIGNER().WRITE(),
+		solana.Meta(configPDA),
+		solana.Meta(matchStatePDA).WRITE(),
+		solana.Meta(solana.SystemProgramID),
+	}
+	ix := solana.NewInstruction(c.programID, accounts, ixData)
+	_, sig, err := c.sendSigned(ctx, keeperKey, []solana.Instruction{ix})
 	return sig, err
 }
 
@@ -348,4 +417,11 @@ func newTransferData(lamports uint64) []byte {
 	data[3] = 0
 	binary.LittleEndian.PutUint64(data[4:], lamports)
 	return data
+}
+
+func anchorDiscriminator(name string) [8]byte {
+	sum := sha256.Sum256([]byte("global:" + name))
+	var out [8]byte
+	copy(out[:], sum[:8])
+	return out
 }
