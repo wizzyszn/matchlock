@@ -103,7 +103,6 @@ export const router = createBrowserRouter([
       {
         element: <ProtectedLayout />,
         children: [
-          { index: true, element: <Navigate to="/markets" replace /> },
           { path: "markets", element: withSuspense(MarketsPage) },
 
           { path: "open", element: withSuspense(OpenWagersPage) },
