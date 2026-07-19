@@ -29,6 +29,7 @@ Built for the Solana + TxLINE hackathon.
 - [Tests](#tests)
 - [Current devnet addresses](#current-devnet-addresses)
 - [Design philosophy](#design-philosophy)
+- [TxLINE API experience](#txline-api-experience)
 - [Known rough edges](#known-rough-edges)
 
 ---
@@ -324,6 +325,28 @@ cd frontend-react && pnpm run build
 There's a `design.md` in the root specifying colors, typography (Manrope for UI, Garamond for display), spacing, border radii, and component inventory with implementation status. The notable choice: **zero box shadows**. All depth comes from borders and color contrast.
 
 Two themes: the landing page uses a dark scheme (`#282828` bg, `#e64040` red), while the app uses an "Ember" theme (`#1e1814` bg, `#d4763f` amber). Intentionally different — the landing page sells the product, the app is where you work.
+
+---
+
+## TxLINE API experience
+
+### What we liked
+
+- **World Cup free tier** — instant access without TxL purchase or KYC, ideal for hackathon velocity.
+- **Stat validation CPI with Merkle proofs** — elegant architecture enabling truly trustless on-chain settlement. The winner's wallet signs a single `settle_wager` instruction, the Matchlock program CPIs into TxLINE's `validate_stat` to verify the proof, and funds are released. No intermediary can manipulate the outcome.
+- **SSE score stream** — reliable real-time match data the keeper ingests and fans out to connected clients via its own SSE endpoint. The Go client handles reconnection with exponential backoff automatically.
+- **Devnet faucet** — `request_devnet_faucet` mints 100 USDT per wallet instantly, which made end-to-end testing straightforward.
+- **Dual-header auth** — clear and secure once you understand the pattern. `Authorization: Bearer {jwt}` + `X-Api-Token: {activated_token}` on every request.
+
+### Friction points
+
+- **Network mismatch is the #1 footgun** — using the mainnet API origin (`txline.txodds.com`) with a devnet subscription (or vice versa) causes silent auth and activation failures. Error messages don't hint at the mismatch. We added a startup validation that enforces network consistency between the API origin and Solana RPC endpoint.
+- **Dual-header auth is easy to miss** — sending only `Authorization: Bearer {jwt}` returns 401/403 with no indication that a second header is required. Both `Authorization` and `X-Api-Token` must be present on every data request.
+- **Outcome stat keys are participant-based, not orientation-based** — stat keys `1002` (participant 1 wins) and `1003` (participant 2 wins) are relative to participant order in the fixture, not home/away orientation. Hardcoding `1002` for home wins fails when `participant1IsHome` is misleading or the fixture lists the away team first. The fix was to probe both stat keys at the settlement sequence and use whichever has `value > 0`, rather than trusting snapshot orientation alone.
+- **TxLINE CPI requires 1.4M Compute Units** — the default 200k CU budget silently fails the settlement instruction on-chain. This must be explicitly set via `ComputeBudget` on every `settle_wager` transaction, which took debugging to uncover.
+- **SSE event schema had no documented sample payload** — capturing the first real score update required trial and error with the live stream. A documented example payload in the API docs would have saved significant time.
+- **`SimulateTransaction` returns `AccountNotFound` for newly funded wallets** — even after a successful faucet transfer, simulation fails for brand-new accounts. We had to use `send-without-preflight` for faucet/make/accept paths.
+- **Odds and fixtures are separate endpoints that must be hydrated together** — `GET /api/fixtures/snapshot` returns the schedule and team metadata, while `GET /api/odds/snapshot/{fixtureId}` returns the 1X2 price lines. These are completely independent; a fixture can exist without any odds attached. We built a `ScheduleWorker` that iterates the fixtures list and, for each fixture, independently fetches odds from up to four candidate sources (current snapshot, live updates cache, and historical pre-kickoff snapshots). If odds aren't available, the fixture still appears in the UI but shows an em dash (`—`) instead of price cells. An additional `OddsWorker` runs on a 60-second loop to retroactively hydrate odds for matches that may have been cached before odds were published. This two-pass hydration pattern was necessary because odds availability lags behind fixture scheduling, and we wanted a seamless browsing experience regardless.
 
 ---
 
