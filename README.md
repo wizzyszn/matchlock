@@ -6,13 +6,150 @@ You pick a match, pick a side, stake some USDT. Someone on the other side picks 
 
 Built for the Solana + TxLINE hackathon.
 
+**Deployed app:** [https://matchlock-u1ww.onrender.com/](https://matchlock-u1ww.onrender.com/)  
+**Demo video:** [https://www.youtube.com/watch?v=I43HTTdQVLw](https://www.youtube.com/watch?v=I43HTTdQVLw)
+
 ---
 
-## The thing it does
+## Table of contents
 
-Two people, one match, opposite outcomes. Escrow on-chain, settlement via CPI into TxLINE's oracle program. The winner pays the Solana fee to claim (or the keeper auto-settles if that's turned on). Loser's funds go to the winner. That's it.
+- [Architecture](#architecture)
+  - [Match synchronization](#1-match-synchronization-real-time-state)
+  - [Wagering](#2-wagering-flow-p2p-play)
+  - [Settlement (winner-claim)](#3-settlement--resolution-flow-permissionless-claim)
+  - [Settlement (keeper auto-settle)](#3b-alternative-settlement-flow-keeper-auto-settle)
+  - [Leaderboard](#4-leaderboard)
+- [TxLINE endpoints](#txline-endpoints)
+- [Stack](#stack)
+- [What's in each directory](#whats-in-each-directory)
+  - [blockchain/](#blockchain--the-program)
+  - [backend-go/](#backend-go--the-keeper)
+  - [frontend-react/](#frontend-react--the-ui)
+- [Running it](#running-it)
+- [Tests](#tests)
+- [Current devnet addresses](#current-devnet-addresses)
+- [Design philosophy](#design-philosophy)
+- [Known rough edges](#known-rough-edges)
 
-The contract has a pause switch — but it's intentionally leaky. You can always cancel an open wager or settle a matched one, even when paused. Funds never get trapped by admin action.
+---
+
+## Architecture
+
+The platform relies on a clear separation of data tracking and on-chain execution. Instead of a central authority settling wagers, the protocol behaves as a trustless escrow matching TxLINE's sports data on-chain.
+
+### 1. Match synchronization (real-time state)
+
+*How live match scores go from the field to the user interface.*
+
+```text
+┌─────────────┐   SSE    ┌──────────────┐  Write  ┌──────────────┐
+│   TxLINE    │ ───────► │  backend-go  │ ──────► │    Redis     │
+│   Oracle    │          │  (Keeper)    │         │ (Match Cache)│
+└─────────────┘          └──────┬───────┘         └──────────────┘
+                                │ SSE fan-out
+                                ▼
+                         ┌──────────────┐
+                         │   Frontend   │ (Live scores update UI)
+                         └──────────────┘
+```
+
+The Keeper worker consumes TxLINE scores directly via SSE. Validated state updates are pushed immediately to Redis for O(1) reads. Connected clients receive live match ticks via `/matches/stream` (SSE), which surgically updates React Query caches.
+
+### 2. Wagering flow (P2P play)
+
+*How users enter into predictions programmatically.*
+
+```text
+┌──────────────┐ 1. make_wager   ┌──────────────┐
+│ Maker Wallet │ ──────────────► │  Matchlock   │ (Creates wager, escrows maker stake)
+└──────────────┘                 │   Program    │
+┌──────────────┐ 2. accept_wager │ (Solana)     │
+│ Taker Wallet │ ──────────────► │              │ (Escrows taker stake, status = Matched)
+└──────────────┘                 └──────────────┘
+```
+
+Maker signs the tx paying the stake in USDT. Escrow vaults are initialized per wager (not pooled). Taker spots an open wager, signs it, and escrows an identical USDT amount. If the Maker set an `invited_taker`, only that specific wallet can accept.
+
+### 3. Settlement & resolution flow (permissionless claim)
+
+*How winnings are resolved once a match ends, without keeper gas fees. (Default mode — `KEEPER_AUTO_SETTLE=false`)*
+
+```text
+┌──────────────┐ 3. final state ┌──────────────┐ 4. close match ┌──────────────┐
+│ TxLINE / SSE │ ─────────────► │   Keeper     │ ─────────────► │  Matchlock   │
+└──────────────┘                └──────┬───────┘                │   Program    │
+                                       │                        └──────▲───────┘
+                              5. GET /settlement-proof                │ 8. CPI (Verify proof)
+                                       │                               │    + Payout 2x Stake
+                                       ▼                        ┌──────┴───────┐
+                                ┌──────────────┐ 6. Sign       │ Winner Wallet│
+                                │   Frontend   │ ────────────► │ (Claimant)   │
+                                └──────────────┘ 7. settle_wager              │
+                                                                └──────────────┘
+```
+
+When TxLINE emits `is_final=true`, the Keeper calls `close_match` on-chain to freeze betting. The winner visits their dashboard; the frontend calls `GET /settlement-proof`. The Keeper fetches the `StatValidation` (Merkle proof) from TxLINE confirming the winning condition. The winner's wallet signs `settle_wager` with the proof as instruction args. Matchlock CPIs into TxLINE's `validate_stat` to verify the oracle, then transfers 2× USDT to the winner.
+
+### 3b. Alternative settlement flow (keeper auto-settle)
+
+*How winnings are automatically paid out when the protocol pays Solana fees. (Opt-in — `KEEPER_AUTO_SETTLE=true`)*
+
+```text
+┌──────────────┐ 1. final state ┌──────────────┐ 2. close match ┌──────────────┐
+│ TxLINE / SSE │ ─────────────► │   Keeper     │ ─────────────► │  Matchlock   │
+└──────────────┘                └──────┬───────┘                │   Program    │
+                                       │ 3. fetch proofs        └──────▲───────┘
+                                       │                                │ 4. settle_wager
+                                       ▼                                │    + Payout 2x Stake
+                                ┌──────────────┐                ┌──────┴───────┐
+                                │ TxLINE API   │                │ Winner Wallet│
+                                └──────────────┘                │ (Receives)   │
+                                                                 └──────────────┘
+```
+
+Same finalization trigger, but the Keeper worker loops over all matched wager accounts, fetches proofs from TxLINE, and submits `settle_wager` on-chain using its own keypair as fee payer.
+
+### 4. Leaderboard
+
+*Post-settlement ranking tracked in Postgres.*
+
+```text
+Keeper Worker ──► RecordSettlement() ──► leaderboard_entries (Postgres)
+                                               │
+                                               ▼
+                                        GET /leaderboard
+                                        GET /leaderboard/me  (auth)
+                                        GET /leaderboard/stats
+                                               │
+                                               ▼
+                                        React Query hooks (60s polling)
+                                               │
+                                               ▼
+                                        Leaderboard page
+                                               (stats cards, rank, player list)
+```
+
+After each successful `settleOne`, the keeper upserts `LeaderboardEntry` rows keyed by user ID: winner gets `+stake` PnL, loser gets `-stake` PnL, both get `2× stake` volume. Unlinked wallets are skipped silently.
+
+---
+
+## TxLINE endpoints
+
+The following TxLINE API endpoints power the application, covering auth, live scores, odds, fixture data, and on-chain settlement proofs.
+
+| Endpoint | Purpose | Used by |
+|---|---|---|
+| `POST {origin}/auth/guest/start` | Fetch guest JWT for dual-header auth (`Authorization` + `X-Api-Token`) | Keeper startup, all downstream requests |
+| `GET /api/scores/stream` | SSE feed of live score updates (goals, game state, final signal) | Keeper `StreamScores` — real-time match sync |
+| `GET /api/scores/snapshot/{fixtureId}` | Terminal score rows with game state, clock, home/away goals | Keeper settlement (build `ScoreUpdate`, verify `is_final`) |
+| `GET /api/scores/stat-validation` | Merkle proof for on-chain CPI (`?fixtureId=X&seq=Y&statKey=Z`) | Settlement — keeper fetches proof; winner or keeper submits `settle_wager` |
+| `GET /api/fixtures/snapshot` | Upcoming fixture schedule (teams, competition, start time) | Keeper schedule hydration, frontend market browser |
+| `GET /api/fixtures/validation` | Merkle proof for fixture integrity (`?fixtureId=X&timestamp=Y`) | Settlement proof enrichment |
+| `GET /api/odds/snapshot/{fixtureId}` | Latest demargined 1X2 odds lines | Keeper odds refresher, frontend odds display |
+| `GET /api/odds/snapshot/{fixtureId}?asOf={timestamp}` | Historical odds at a specific time | Keeper odds hydration (pre-kickoff baseline) |
+| `GET /api/odds/updates/{fixtureId}` | Live odds from the 5-minute in-memory cache | Keeper odds refresher during live matches |
+
+All data requests use dual-header auth: `Authorization: Bearer {guest_jwt}` + `X-Api-Token: {activated_api_token}`. The guest JWT is fetched lazily at startup via `/auth/guest/start` with automatic retry and 401-triggered refresh.
 
 ---
 
@@ -22,89 +159,83 @@ Three directories, three languages, one git root.
 
 | Directory | What | The actual bits |
 |-----------|------|-----------------|
-| `blockchain/` | Anchor program | Rust, Anchor 1.1.2, LiteSVM for tests |
+| `blockchain/` | Anchor program | Rust, Anchor 1.1.2, LiteSVM tests |
 | `backend-go/` | Keeper + API | Go 1.24, Gin, GORM, Redis, `gagliardetto/solana-go` |
 | `frontend-react/` | Web app | React 19, Vite 8 (Rolldown), TypeScript 6, Tailwind 4, pnpm |
 
-Some notable choices that didn't make the bullet list:
+Notable choices:
 
-- **`@coral-xyz/anchor`** — the community fork of Anchor (the official repo archived, this is what everyone uses now)
-- **oxlint** instead of ESLint. It's written in Rust and it's fast. No ESLint config files anywhere in the repo.
-- **`@base-ui/react`** — headless React primitives from the MUI team. Not Radix, not shadcn's default.
+- **`@coral-xyz/anchor`** — community fork of Anchor (official repo archived, this is what everyone uses now)
+- **oxlint** instead of ESLint. Written in Rust, fast. No ESLint config files anywhere.
+- **`@base-ui/react`** — headless React primitives from the MUI team. Not Radix, not shadcn.
 - **Zod 4** on the frontend for validation.
 - **`canvas-confetti`** because why not.
-- **No tests on the frontend.** TypeScript type-checking is the gate. That's a tradeoff we made, not an oversight.
+- **No frontend tests.** TypeScript type-checking is the gate. Tradeoff, not oversight.
 - **No Docker.** `go run`, `pnpm dev`, `anchor build`. That's how it runs.
 
 ---
 
-## How it all fits
-
-```
-TxLINE ──SSE──► keeper ──REST──► frontend
-                  │                  │
-                  ▼                  ▼
-               Redis            Solana RPC
-              (cache)           (program)
-```
-
-The browser talks to the keeper, not to TxLINE. API tokens stay server-side. The keeper ingests scores via SSE, caches everything in Redis, and exposes REST endpoints for matches, wagers, settlement proofs, and the leaderboard.
-
----
-
-## What you'll find in each directory
+## What's in each directory
 
 ### `blockchain/` — the program
 
 The on-chain escrow. Instructions in `src/instructions/`:
 
-- `make_wager` — create a wager, stake USDT into a PDA vault
-- `accept_wager` — match an open wager, stake the opposite side
-- `settle_wager` — winner or keeper submits a TxLINE Merkle proof, vault pays out
-- `cancel_wager` — maker pulls the wager back (only while Open)
-- `register_wallet` / `unregister_wallet` — bind a Solana address to an off-chain identity
-- `update_config` — change authority, mints, or toggle pause
-- `initialize` — one-time, creates the Config PDA
+| Instruction | What it does |
+|---|---|
+| `make_wager` | Create a wager, stake USDT into a PDA vault |
+| `accept_wager` | Match an open wager, stake the opposite side |
+| `settle_wager` | Winner or keeper submits a TxLINE Merkle proof, vault pays out |
+| `void_wager` | Refund both participants when neither side won (draw outcome) |
+| `cancel_wager` | Maker pulls the wager back (only while Open) |
+| `register_wallet` / `unregister_wallet` | Bind a Solana address to an off-chain identity |
+| `update_config` | Change authority, mints, or toggle pause |
+| `close_match` | Prevent new wagers on a finished match |
+| `initialize` | One-time, creates the Config PDA |
 
-The tests use **LiteSVM**, an in-process Solana VM. No local validator needed. They compile the `.so` at build time and run 14 test functions covering the full lifecycle — invited taker, wrong side rejection, settlement proof validation, draw settlement, all of it.
+Tests use **LiteSVM** — an in-process Solana VM. No local validator needed.
 
 ### `backend-go/` — the keeper
 
-One main daemon (`cmd/keeper`) and about 9 utility CLIs scattered across `cmd/`:
+One main daemon and several utility CLIs across `cmd/`:
 
-- `keeper` — SSE ingestor, API server, settlement worker, odds refresher, reconcile loop, leaderboard updater
-- `initialize-matchlock` — one-time Config setup on devnet
-- `smoke-wager` / `smoke-cancel` — full E2E tests against live devnet
-- `keeper-settle` — manually drive settlement for a specific fixture
-- `place-matched-wager`, `request-faucet`, `seed-leaderboard`, `activate-txline` — test helpers
+| CLI | Purpose |
+|---|---|
+| `keeper` | Main daemon — SSE ingestor, API server, settlement worker, reconcile loop, leaderboard updater |
+| `initialize-matchlock` | One-time Config setup on devnet |
+| `smoke-wager` / `smoke-cancel` | Full E2E tests against live devnet |
+| `keeper-settle` | Manual ops crank — settle a specific fixture by ID |
+| `place-matched-wager`, `request-faucet`, `seed-leaderboard`, `activate-txline` | Test helpers |
 
-Config comes from YAML, `.env`, or env vars — Viper handles the layering. There's a network consistency check at startup that catches the classic "devnet RPC + mainnet API origin" footgun.
+Config comes from YAML, `.env`, or env vars — Viper handles the layering. Network consistency check at startup catches the classic "devnet RPC + mainnet API origin" footgun.
 
 ### `frontend-react/` — the UI
 
 Pages (all lazy-loaded):
 
-- `/` — landing page
-- `/markets` — match browser with live/finished/upcoming tabs, odds cells, challenge slip
-- `/my-wagers/` — active wagers list and detail view
-- `/open` — wagers waiting for an opponent
-- `/history` — settled wagers and PnL
-- `/invites` — direct email challenges
-- `/leaderboard` — ranked players by PnL
-- `/profile` — wallet linking, stats
-- `/login` — magic link auth
+| Route | Page |
+|---|---|
+| `/` | Landing page |
+| `/markets` | Match browser (live/finished/upcoming tabs, odds cells, challenge slip) |
+| `/my-wagers/` | Active wagers list + detail view |
+| `/open` | Wagers waiting for an opponent |
+| `/history` | Settled wagers and PnL |
+| `/invites` | Direct email challenges |
+| `/leaderboard` | Ranked players by PnL |
+| `/profile` | Wallet linking, stats |
+| `/login` | Magic link auth |
 
-The wager flow goes: **select match → pick side → enter stake → simulate → confirm dialog → sign**. The confirm dialog shows the match, side, stake, network fee estimate, and cluster badge before the wallet pops up.
+Wager flow: **select match → pick side → enter stake → simulate → confirm dialog → sign**. The confirm dialog shows match, side, stake, network fee, and cluster badge before the wallet pops up.
 
-There's a `MatchStreamSubscriber` component (renders `null`) that opens a single global `EventSource` to the keeper and splices live score updates directly into the React Query cache. SSE for push, HTTP polling as fallback.
+`MatchStreamSubscriber` (renders `null`) opens a single global `EventSource` to the keeper and splices live score updates directly into React Query cache. SSE for push, HTTP polling as fallback.
 
-An `OptimisticWagersStore` (zustand) tracks wagers that haven't confirmed yet — they show up immediately in the UI and disappear after 120s if the tx never lands.
+`OptimisticWagersStore` (zustand) tracks pre-confirmation wagers — they show immediately and disappear after 120s if the tx never lands.
 
 ---
 
 ## Running it
 
-### Prerequisites you'll actually need
+### Prerequisites
 
 - Node.js 22+, pnpm 10
 - Go 1.24+
@@ -113,7 +244,7 @@ An `OptimisticWagersStore` (zustand) tracks wagers that haven't confirmed yet �
 - PostgreSQL 16+
 - Redis 7+
 - Solana CLI configured for devnet
-- A Brevo account + API key (magic link emails) — skip this if you don't need auth
+- Brevo account + API key (skip if you don't need auth)
 
 ### Setup
 
@@ -132,6 +263,9 @@ cp .env.example .env
 
 # Database
 createdb matchlock  # tables auto-migrate on startup
+
+# Redis
+redis-server
 ```
 
 ### Run locally
@@ -157,7 +291,9 @@ anchor program deploy --provider.cluster devnet
 cd ../backend-go && go run ./cmd/initialize-matchlock
 ```
 
-### Tests
+---
+
+## Tests
 
 ```bash
 # On-chain tests (LiteSVM — fast, no validator needed)
@@ -183,50 +319,22 @@ cd frontend-react && pnpm run build
 
 ---
 
-## Design philosophy (the 253-line spec)
+## Design philosophy
 
-There's a `design.md` in the root. It specifies everything — colors, typography (Manrope for UI, Garamond for display), spacing, border radii, component inventory with implementation status. The interesting bit: **zero box shadows**. All depth comes from borders and color contrast, which makes the UI feel flatter and more deliberate.
+There's a `design.md` in the root specifying colors, typography (Manrope for UI, Garamond for display), spacing, border radii, and component inventory with implementation status. The notable choice: **zero box shadows**. All depth comes from borders and color contrast.
 
-There are actually two themes: the landing page uses a dark scheme (`#282828` bg, `#e64040` red), while the app itself uses an "Ember" theme (`#1e1814` bg, `#d4763f` amber). They're intentionally different — the landing page sells the product, the app is where you work.
+Two themes: the landing page uses a dark scheme (`#282828` bg, `#e64040` red), while the app uses an "Ember" theme (`#1e1814` bg, `#d4763f` amber). Intentionally different — the landing page sells the product, the app is where you work.
 
 ---
 
-## Things that went wrong (and you should know about)
+## Known rough edges
 
-The [`docs/integration-journal.md`](docs/integration-journal.md) has the full list, but the highlights:
+The full list lives in [`docs/integration-journal.md`](docs/integration-journal.md), but the highlights:
 
-- **Vite 8 + `vite-plugin-node-polyfills`** — Rolldown broke the polyfill shim. The fix was to remove the plugin and manually polyfill `Buffer` via `src/polyfills.ts`. If you upgrade Vite, watch for `init_dist is not a function`.
-- **TxLINE network mismatch** — using mainnet API origin with a devnet subscription (or vice versa) fails silently. The keeper config now validates this at startup.
-- **GORM column naming** — `NetPnL` auto-migrates to `net_pn_l` (not `net_pnl`). Fixed with a `gorm:"column:net_pnl"` tag.
-- **LiteSVM bundles SPL Token + ATA** — don't try to load them from `/tmp/`. Just use `with_default_programs()`.
+- **Vite 8 + `vite-plugin-node-polyfills`** — Rolldown broke the polyfill shim. Fix: remove the plugin and manually polyfill `Buffer` via `src/polyfills.ts`.
+- **TxLINE network mismatch** — mainnet API origin + devnet subscription fails silently. Config validates this at startup.
+- **GORM column naming** — `NetPnL` auto-migrates to `net_pn_l`. Fixed with `gorm:"column:net_pnl"` tag.
+- **LiteSVM bundles SPL Token + ATA** — don't load them from `/tmp/`. Use `with_default_programs()`.
 - **SimulateTransaction returns AccountNotFound** — for brand-new wallets even after funding. `send-without-preflight` works for faucet/make/accept.
-- **Keeper offline + matched wagers** — when the keeper goes down, matched wagers stay matched. The winner-claim settlement model (`KEEPER_AUTO_SETTLE=false`) solves this because users can claim without the keeper.
-
----
-
-## Project structure
-
-```
-matchlock/
-├── blockchain/               # Anchor program (Rust)
-│   ├── programs/blockchain/src/
-│   ├── programs/blockchain/tests/
-│   └── Anchor.toml
-├── backend-go/               # Go keeper service
-│   ├── cmd/                  # daemon + CLIs
-│   ├── internal/             # api, keeper, solana, db, leaderboard, config
-│   └── api/openapi.yaml
-├── frontend-react/           # React SPA
-│   └── src/
-│       ├── hooks/            # React Query hooks
-│       ├── pages/            # route pages
-│       ├── components/       # UI components
-│       └── lib/              # API client, Anchor helpers, etc.
-├── docs/
-│   └── integration-journal.md
-└── design.md                 # design system spec
-```
-
----
-
-The integration journal has 6000+ words of actual field notes from building this thing. If you're extending the project or debugging something weird, read it first.
+- **Keeper offline + matched wagers** — winner-claim settlement model (`KEEPER_AUTO_SETTLE=false`) solves this: users claim without the keeper.
+- **Refundable state is keeper-only** — `refundable` (draw outcome) currently requires keeper auto-settle or manual crank; no frontend "Claim refund" button yet.
