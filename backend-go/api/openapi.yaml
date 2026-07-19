@@ -13,7 +13,7 @@ info:
     browser wallet via the Solana program — this API is read-only for on-chain state.
 
     **Devnet defaults** (see `backend-go/.env`):
-    - Program: `7jbdwJLrePo6dr6Jo5sSmK4RQC5tYRrGebnkMFTuPGq5`
+    - Program: `B39Vk22T2VPpqBEbGkW51BzFC6sNeeiQQ1mqwdvCJ2H4`
     - Stablecoin mint: `ELWTKspHKCnCfCiCiqYw1EDH77k8VCP74dK9qytG2Ujh`
     - Cluster: `devnet`
 
@@ -230,8 +230,8 @@ paths:
       summary: Get settlement status for a matched wager
       description: |
         Returns the current settlement state of a matched wager. States include:
-        `match_live`, `match_ended_unverified`, `queued`, `retrying`, `settled`, `failed`,
-        and `not_applicable`.
+        `match_live`, `match_ended_unverified`, `claimable`, `refundable`, `queued`,
+        `retrying`, `settled`, `failed`, and `not_applicable`.
       parameters:
         - $ref: "#/components/parameters/WagerPubkey"
       responses:
@@ -1094,6 +1094,9 @@ components:
         pending_settlements:
           type: integer
           description: Number of wagers awaiting keeper settlement
+        stale_matches:
+          type: integer
+          description: Non-final fixtures too old to be represented as live
 
     NotReadyStatus:
       type: object
@@ -1130,6 +1133,9 @@ components:
         settlement_queue:
           type: string
           description: ok or error message
+        match_freshness:
+          type: string
+          description: ok, degraded, or cache error message
 
     # ── Matches ──
     MatchView:
@@ -1141,6 +1147,7 @@ components:
         - is_final
         - seq
         - updated_at
+        - status_stale
       properties:
         match_id:
           type: string
@@ -1175,6 +1182,9 @@ components:
           type: string
           format: date-time
           nullable: true
+        status_stale:
+          type: boolean
+          description: True when a non-final fixture has exceeded the maximum live-status age
         start_time:
           type: integer
           format: int64
@@ -1422,6 +1432,8 @@ components:
           enum:
             - match_live
             - match_ended_unverified
+            - claimable
+            - refundable
             - queued
             - retrying
             - settled

@@ -75,7 +75,7 @@ func (w *ScheduleWorker) syncOnce(ctx context.Context) error {
 
 		match := cache.ApplyFixtureSchedule(existing, fixture)
 
-		if shouldHydrateScores(fixture.StartTime, now) {
+		if !(existing.IsFinal && existing.FinalSource == cache.FinalSourceTxline) && shouldHydrateScores(fixture.StartTime, now) {
 			if rows, err := w.Txline.FetchScoreSnapshot(ctx, fixture.FixtureID); err == nil {
 				if row, err := latestSettlementSnapshot(rows); err == nil {
 					if update, err := row.ToScoreUpdate(); err == nil {

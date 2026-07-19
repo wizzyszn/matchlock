@@ -12,7 +12,7 @@ pub use error::ErrorCode;
 pub use instructions::*;
 pub use state::*;
 
-declare_id!("7jbdwJLrePo6dr6Jo5sSmK4RQC5tYRrGebnkMFTuPGq5");
+declare_id!("B39Vk22T2VPpqBEbGkW51BzFC6sNeeiQQ1mqwdvCJ2H4");
 
 #[program]
 pub mod blockchain {
@@ -81,6 +81,15 @@ pub mod blockchain {
         merkle_root: [u8; 32],
     ) -> Result<()> {
         instructions::settle_wager::handle_settle_wager(ctx, validation, winning_side, merkle_root)
+    }
+
+    pub fn void_wager(
+        ctx: Context<VoidWager>,
+        validation: ValidateStatArgs,
+        winning_side: Side,
+        merkle_root: [u8; 32],
+    ) -> Result<()> {
+        instructions::void_wager::handle_void_wager(ctx, validation, winning_side, merkle_root)
     }
 
     pub fn update_config(

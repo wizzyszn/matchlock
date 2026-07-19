@@ -461,6 +461,70 @@ fn draw_wager_settles_for_draw_backer() {
 }
 
 #[test]
+fn unselected_third_outcome_refunds_both_participants() {
+    let mut env = TestEnv::new();
+    let stake = 400_000u64;
+    let maker_ata = get_associated_token_address(&env.maker.pubkey(), &env.mint);
+    let taker_ata = get_associated_token_address(&env.taker.pubkey(), &env.mint);
+    let maker_before = env.token_balance(&maker_ata);
+    let taker_before = env.token_balance(&taker_ata);
+
+    let (wager, vault) = env.make_wager(stake, Side::Home);
+    env.accept_wager(wager, vault, Side::Draw);
+    env.void_wager_as_keeper(wager, vault, Side::Away);
+
+    assert_eq!(env.token_balance(&maker_ata), maker_before);
+    assert_eq!(env.token_balance(&taker_ata), taker_before);
+    assert!(env.svm.get_account(&wager).is_none());
+    assert!(env.svm.get_account(&vault).is_none());
+}
+
+#[test]
+fn selected_outcome_cannot_use_void_path() {
+    let mut env = TestEnv::new();
+    let (wager, vault) = env.make_wager(100_000, Side::Home);
+    env.accept_wager(wager, vault, Side::Draw);
+
+    let maker = env.maker.pubkey();
+    let taker = env.taker.pubkey();
+    let maker_ata = get_associated_token_address(&maker, &env.mint);
+    let taker_ata = get_associated_token_address(&taker, &env.mint);
+    let daily_scores = env.setup_daily_scores_account();
+    let ix = Instruction::new_with_bytes(
+        blockchain::id(),
+        &blockchain::instruction::VoidWager {
+            validation: env.validation_for_side(Side::Home),
+            winning_side: Side::Home,
+            merkle_root: [1u8; 32],
+        }
+        .data(),
+        blockchain::accounts::VoidWager {
+            settler: env.authority.pubkey(),
+            config: env.config,
+            wager,
+            vault,
+            maker,
+            maker_stablecoin: maker_ata,
+            taker,
+            taker_stablecoin: taker_ata,
+            stablecoin_mint: env.mint,
+            daily_scores_merkle_roots: daily_scores,
+            txline_program: TXLINE_MOCK_PROGRAM_ID,
+            token_program: TOKEN_PROGRAM_ID,
+            associated_token_program: ATA_PROGRAM_ID,
+        }
+        .to_account_metas(None),
+    );
+    let tx = Transaction::new_signed_with_payer(
+        &[ix],
+        Some(&env.authority.pubkey()),
+        &[&env.authority],
+        env.svm.latest_blockhash(),
+    );
+    assert!(env.svm.send_transaction(tx).is_err());
+}
+
+#[test]
 fn accept_same_side_as_maker_fails() {
     let mut env = TestEnv::new();
     let (wager, vault) = env.make_wager(100_000, Side::Draw);

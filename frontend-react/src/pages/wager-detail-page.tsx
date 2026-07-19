@@ -1,17 +1,20 @@
 import { useWallet } from '@solana/wallet-adapter-react'
-import { ArrowLeft, ExternalLink, Swords, Clock } from 'lucide-react'
+import { ArrowLeft, CheckCircle, ExternalLink, Swords, Clock } from 'lucide-react'
 import { useCallback, useMemo, useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
 import { toast } from 'sonner'
 
 import { Button } from '@/components/ui/button'
-import { Card, CardContent } from '@/components/ui/card'
+
+import { PageHeader, PageHeaderHeading } from '@/components/ui/page-header'
 import { Skeleton } from '@/components/ui/skeleton'
 import { ConfirmTxDialog, type ConfirmTxDetails } from '@/components/wager/confirm-tx-dialog'
 import { DuelFrame } from '@/components/wager/duel-frame'
 import { OutcomePicker } from '@/components/wager/outcome-picker'
 import { SettlementStatus } from '@/components/wager/settlement-status'
+import { MerkleReceiptPanel } from '@/components/wager/merkle-receipt-panel'
 import { WagerStatusBadge } from '@/components/wager/wager-status-badge'
+import { cn } from '@/lib/utils'
 import { useMatchesQuery } from '@/hooks/queries/use-matches'
 import { useWagerQuery, useWagerSettlementQuery } from '@/hooks/queries/use-wagers'
 import { useWagerMutations } from '@/hooks/mutations/use-wager-mutations'
@@ -26,6 +29,7 @@ import { sideLabel, availableTakerSides, defaultTakerSide } from '@/lib/wager-si
 import { canClaimWinnings } from '@/lib/wager-outcome'
 import { isPlaceholderAddress } from '@/lib/accounts'
 import { useConfig } from '@/hooks/use-api'
+import { useOptimisticWagersStore } from '@/stores/optimistic-wagers-store'
 
 export function WagerDetailPage() {
   const { wagerPubkey } = useParams<{ wagerPubkey: string }>()
@@ -42,6 +46,7 @@ export function WagerDetailPage() {
   const api = useApi()
   const { acceptWager, cancelWager, claimWager, mapError } = useWagerMutations()
   const { buildCancel, buildClaim, buildAccept, wallet } = useWagerTxBuilders()
+  const optimisticWagers = useOptimisticWagersStore((state) => state.wagers)
 
   const match = useMemo(
     () => matches?.find((m) => m.match_id === wager?.match_id),
@@ -49,7 +54,9 @@ export function WagerDetailPage() {
   )
 
   const labels = match ? matchLabels(match) : null
-  const wageringClosed = match ? classifyMatch(match) === 'finished' : false
+  const wageringClosed = match
+    ? ['finished', 'pending'].includes(classifyMatch(match))
+    : false
 
   const isMaker = walletAddress ? wager?.maker === walletAddress : false
   const canCancel = Boolean(isMaker && wager?.status === 'open')
@@ -180,14 +187,19 @@ export function WagerDetailPage() {
 
   if (isLoading) {
     return (
-      <div className="mx-auto max-w-2xl space-y-6">
-        <div className="inline-flex items-center gap-1.5 text-sm text-muted-foreground">
-          <ArrowLeft className="size-4" aria-hidden />
-          Back to My wagers
-        </div>
+      <div className="mx-auto flex w-full max-w-2xl flex-col pb-12 space-y-8">
+        <PageHeader className="mb-4">
+          <div className="flex items-center gap-4">
+            <div className="inline-flex size-9 items-center justify-center rounded-full border bg-muted" />
+            <div className="space-y-2">
+              <Skeleton className="h-8 w-48" />
+              <Skeleton className="h-4 w-32" />
+            </div>
+          </div>
+        </PageHeader>
 
-        <Card className="overflow-hidden">
-          <CardContent className="space-y-5 p-6">
+        <div className="space-y-8">
+          <div className="space-y-5">
             <div className="flex items-start justify-between gap-3">
               <Skeleton className="h-5 w-32" />
               <Skeleton className="h-5 w-16 rounded-full" />
@@ -215,8 +227,8 @@ export function WagerDetailPage() {
                   <Skeleton className="h-4 w-16" />
                </div>
             </div>
-          </CardContent>
-        </Card>
+          </div>
+        </div>
       </div>
     )
   }
@@ -258,31 +270,43 @@ export function WagerDetailPage() {
   const stake = formatStakeBaseUnits(wager.stake)
   const payout = formatStakeBaseUnits(wager.stake * 2)
 
-  return (
-    <div className="mx-auto max-w-2xl space-y-6">
-      <Link
-        to="/my-wagers"
-        className="inline-flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground"
-      >
-        <ArrowLeft className="size-4" aria-hidden />
-        Back to My wagers
-      </Link>
+  const showResolution =
+    settlement?.state === 'settled' ||
+    settlement?.state === 'claimable' ||
+    settlement?.state === 'refundable' ||
+    settlement?.state === 'queued'
 
-      <Card className="overflow-hidden">
-        <CardContent className="space-y-5 p-6">
-          <div className="flex items-start justify-between gap-3">
-            <div className="min-w-0 space-y-1">
-              <p className="flex items-center gap-1.5 text-sm font-medium text-muted-foreground">
-                <Swords className="size-4 shrink-0" aria-hidden />
-                {roleLabel}
-              </p>
+  return (
+    <div className={cn("mx-auto flex w-full flex-col pb-12", showResolution ? "max-w-5xl" : "max-w-2xl")}>
+      <PageHeader className="mb-8">
+        <div className="flex items-center gap-4">
+          <Link
+            to="/my-wagers"
+            className="inline-flex size-9 items-center justify-center rounded-full border bg-background text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+          >
+            <ArrowLeft className="size-4" aria-hidden />
+            <span className="sr-only">Back</span>
+          </Link>
+          <div className="space-y-1">
+            <PageHeaderHeading className="text-2xl sm:text-3xl">Wager Details</PageHeaderHeading>
+
+          </div>
+        </div>
+      </PageHeader>
+
+      <div className="space-y-12">
+        <div className=" w-full space-y-8 ">
+          <div className="flex items-center justify-between">
+            <h2 className="text-xl font-heading">Match Information</h2>
+            <div className="flex items-center gap-2">
+              <Swords className="size-4 shrink-0 text-primary" aria-hidden />
+              {roleLabel}
             </div>
-            <WagerStatusBadge status={wager.status} />
           </div>
 
           {labels ? (
             <>
-              <div className="flex min-w-0 items-center gap-2 text-sm text-muted-foreground">
+              <div className="flex min-w-0 items-center gap-2 text-sm text-muted-foreground justify-center">
                 <span className="truncate">{labels.league}</span>
                 {labels.isLive ? (
                   <>
@@ -295,10 +319,17 @@ export function WagerDetailPage() {
                       Live
                     </span>
                   </>
+                ) : labels.isStatusStale ? (
+                  <>
+                    <span aria-hidden>·</span>
+                    <span className="inline-flex shrink-0 items-center gap-1 font-medium text-muted-foreground">
+                      Result pending
+                    </span>
+                  </>
                 ) : null}
               </div>
 
-              <DuelFrame home={labels.homeTeam} away={labels.awayTeam} size="editorial" layout="stack" />
+              <DuelFrame home={labels.homeTeam} away={labels.awayTeam} size="editorial" layout="inline" />
             </>
           ) : (
             <p className="font-heading text-xl">Match {wager.match_id}</p>
@@ -392,11 +423,15 @@ export function WagerDetailPage() {
               </Button>
             </div>
           ) : null}
-        </CardContent>
 
-        {canCancel || claimable ? (
-          <div className="border-t px-6 py-4">
-            {claimable ? (
+        {canCancel || claimable || (wager && optimisticWagers[wager.pubkey]?.wager.status === 'settled') ? (
+          <div className="pt-4">
+            {wager && optimisticWagers[wager.pubkey]?.wager.status === 'settled' ? (
+              <Button className="min-h-12 w-full text-base" disabled>
+                <CheckCircle className="mr-1.5 size-4 shrink-0 text-green-600" aria-hidden />
+                <span className="text-green-600">Claimed</span>
+              </Button>
+            ) : claimable ? (
               <Button
                 className="min-h-12 w-full text-base"
                 disabled={claimWager.isPending}
@@ -415,7 +450,15 @@ export function WagerDetailPage() {
             )}
           </div>
         ) : null}
-      </Card>
+        </div>
+
+      {showResolution ? (
+        <div className="w-full">
+          <hr className="my-10 border-border/50" />
+          <MerkleReceiptPanel fixtureId={match?.fixture_id || 18218149} />
+        </div>
+      ) : null}
+      </div>
 
       <ConfirmTxDialog
         open={dialogOpen}

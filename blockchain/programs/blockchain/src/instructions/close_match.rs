@@ -48,6 +48,9 @@ pub fn handle_close_match(ctx: Context<CloseMatch>, match_id: Vec<u8>) -> Result
         match_state.match_id_bytes() == match_id.as_slice(),
         ErrorCode::InvalidMatchId,
     );
+    if match_state.is_closed {
+        return Ok(());
+    }
     match_state.is_closed = true;
     match_state.closed_at = Clock::get()?.unix_timestamp;
 

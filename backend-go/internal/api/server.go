@@ -100,6 +100,7 @@ func newMux(h *handler) *http.ServeMux {
 	mux.HandleFunc("POST /challenges/invites/{id}/wager", auth.RequireAuth(h.postChallengeInviteWager))
 
 	mux.Handle("GET /openapi.yaml", serveOpenAPISpec())
+	mux.HandleFunc("GET /fixtures/validation", h.getFixtureValidation)
 	mux.Handle("GET /docs", serveDocs())
 	mux.HandleFunc("GET /docs/", func(w http.ResponseWriter, r *http.Request) {
 		http.Redirect(w, r, "/docs", http.StatusMovedPermanently)

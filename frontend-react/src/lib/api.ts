@@ -13,6 +13,8 @@ export type MatchOdds = {
 export type SettlementState =
   | 'match_live'
   | 'match_ended_unverified'
+  | 'claimable'
+  | 'refundable'
   | 'queued'
   | 'retrying'
   | 'settled'
@@ -30,6 +32,18 @@ export type SettlementProof = {
   epoch_day: number
   daily_scores_pda: string
   txline_program_id: string
+}
+
+export type FixtureValidationProofNode = {
+  hash: string
+  isRightSibling: boolean
+}
+
+export type FixtureValidation = {
+  snapshot: Record<string, unknown>
+  summary: Record<string, unknown>
+  subTreeProof: FixtureValidationProofNode[] | null
+  mainTreeProof: FixtureValidationProofNode[] | null
 }
 
 export type WagerSettlementStatus = {
@@ -52,6 +66,7 @@ export type Match = {
   seq: number
   updated_at: string
   finalized_at?: string | null
+  status_stale?: boolean
   start_time?: number
   competition_id?: number
   competition?: string
@@ -311,6 +326,15 @@ export class MatchlockApi {
   getWagerSettlementProof(pubkey: string) {
     return this.request<SettlementProof>(
       `/wagers/${encodeURIComponent(pubkey)}/settlement-proof`,
+    )
+  }
+
+  getFixtureValidation(fixtureId: number, timestamp?: number) {
+    const search = new URLSearchParams()
+    search.set('fixtureId', String(fixtureId))
+    if (timestamp !== undefined) search.set('timestamp', String(timestamp))
+    return this.request<FixtureValidation>(
+      `/fixtures/validation?${search.toString()}`,
     )
   }
 

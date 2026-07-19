@@ -2,6 +2,7 @@ package keeper
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log/slog"
 	"time"
@@ -44,6 +45,48 @@ func settlementRetryDelay(base time.Duration, attempts int) time.Duration {
 		}
 	}
 	return delay
+}
+
+// schedulePendingSettlement persists work before proof fetching or transaction
+// submission. The boolean is true only when a new item was created and should
+// be attempted immediately; existing items retain their retry schedule.
+func (w *Worker) schedulePendingSettlement(
+	ctx context.Context,
+	update txline.ScoreUpdate,
+	wager chainsol.Wager,
+) (bool, error) {
+	matchID := update.MatchID()
+	wagerPubkey := wager.Pubkey.String()
+	settled, err := w.Cache.IsSettled(ctx, matchID, wagerPubkey)
+	if err != nil {
+		return false, fmt.Errorf("check settled marker: %w", err)
+	}
+	if settled {
+		w.clearPendingSettlement(ctx, matchID, wagerPubkey)
+		return false, nil
+	}
+	if _, err := w.Cache.GetPendingSettlement(ctx, matchID, wagerPubkey); err == nil {
+		return false, nil
+	} else if !errors.Is(err, cache.ErrPendingSettlementNotFound) {
+		return false, fmt.Errorf("load pending settlement: %w", err)
+	}
+
+	now := time.Now().UTC()
+	item := cache.PendingSettlement{
+		MatchID:     matchID,
+		WagerPubkey: wagerPubkey,
+		FixtureID:   update.FixtureID,
+		Seq:         update.Seq,
+		GameState:   update.GameState,
+		Attempts:    0,
+		NextRetryAt: now,
+		CreatedAt:   now,
+		UpdatedAt:   now,
+	}
+	if err := w.Cache.EnqueuePendingSettlement(ctx, item); err != nil {
+		return false, fmt.Errorf("enqueue pending settlement: %w", err)
+	}
+	return true, nil
 }
 
 func (w *Worker) enqueuePendingSettlement(
@@ -109,13 +152,12 @@ func (w *Worker) ProcessPendingQueue(ctx context.Context, limit int) error {
 
 func (w *Worker) processPendingItem(ctx context.Context, item cache.PendingSettlement) error {
 	if item.Attempts >= w.maxSettlementAttempts() {
-		slog.Error("pending settlement exceeded max attempts",
+		slog.Warn("pending settlement exceeded retry alert threshold",
 			"match_id", item.MatchID,
 			"wager", item.WagerPubkey,
 			"attempts", item.Attempts,
 			"last_error", item.LastError,
 		)
-		return nil
 	}
 
 	pubkey, err := solanago.PublicKeyFromBase58(item.WagerPubkey)

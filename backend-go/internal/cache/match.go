@@ -18,30 +18,30 @@ var ErrPendingSettlementNotFound = errors.New("pending settlement not found")
 
 // Match is the cached view of a TxLINE fixture used by the API and keeper.
 type Match struct {
-	MatchID    string    `json:"match_id"`
-	FixtureID  int64     `json:"fixture_id"`
-	GameState  string    `json:"game_state"`
-	IsFinal     bool   `json:"is_final"`
-	FinalSource string `json:"final_source,omitempty"`
-	HomeGoals   *int32 `json:"home_goals,omitempty"`
-	AwayGoals  *int32    `json:"away_goals,omitempty"`
-	Seq        int32     `json:"seq"`
-	UpdatedAt  time.Time `json:"updated_at"`
+	MatchID     string     `json:"match_id"`
+	FixtureID   int64      `json:"fixture_id"`
+	GameState   string     `json:"game_state"`
+	IsFinal     bool       `json:"is_final"`
+	FinalSource string     `json:"final_source,omitempty"`
+	HomeGoals   *int32     `json:"home_goals,omitempty"`
+	AwayGoals   *int32     `json:"away_goals,omitempty"`
+	Seq         int32      `json:"seq"`
+	UpdatedAt   time.Time  `json:"updated_at"`
 	FinalizedAt *time.Time `json:"finalized_at,omitempty"`
 
 	// Schedule metadata (from fixtures snapshot and/or scores stream)
-	StartTime      int64  `json:"start_time,omitempty"`
-	CompetitionID  int32  `json:"competition_id,omitempty"`
-	Competition    string `json:"competition,omitempty"`
-	FixtureGroupID int32  `json:"fixture_group_id,omitempty"`
-	Participant1ID     int32 `json:"participant1_id,omitempty"`
-	Participant2ID     int32 `json:"participant2_id,omitempty"`
-	Participant1IsHome bool  `json:"participant1_is_home,omitempty"`
-	HomeTeam       string `json:"home_team,omitempty"`
-	AwayTeam       string `json:"away_team,omitempty"`
-	SportID        int32  `json:"sport_id,omitempty"`
-	CountryID      int32  `json:"country_id,omitempty"`
-	Odds           *MatchOdds `json:"odds,omitempty"`
+	StartTime          int64      `json:"start_time,omitempty"`
+	CompetitionID      int32      `json:"competition_id,omitempty"`
+	Competition        string     `json:"competition,omitempty"`
+	FixtureGroupID     int32      `json:"fixture_group_id,omitempty"`
+	Participant1ID     int32      `json:"participant1_id,omitempty"`
+	Participant2ID     int32      `json:"participant2_id,omitempty"`
+	Participant1IsHome bool       `json:"participant1_is_home,omitempty"`
+	HomeTeam           string     `json:"home_team,omitempty"`
+	AwayTeam           string     `json:"away_team,omitempty"`
+	SportID            int32      `json:"sport_id,omitempty"`
+	CountryID          int32      `json:"country_id,omitempty"`
+	Odds               *MatchOdds `json:"odds,omitempty"`
 }
 
 // MatchOdds is the cached 1X2 StablePrice line for a fixture.
@@ -60,7 +60,13 @@ type SettlementRecord struct {
 }
 
 // ApplyScoreUpdate merges a live scores SSE event onto cached match state.
+// Once a match is txline-verified final, non-final updates are discarded to
+// prevent stale snapshot data from regressing the definitive result.
 func ApplyScoreUpdate(existing Match, update txline.ScoreUpdate) Match {
+	if existing.IsFinal && existing.FinalSource == FinalSourceTxline && !update.IsFinal() {
+		return existing
+	}
+
 	out := existing
 	out.MatchID = update.MatchID()
 	out.FixtureID = update.FixtureID

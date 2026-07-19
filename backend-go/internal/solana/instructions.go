@@ -232,15 +232,23 @@ func (c *Client) AcceptWager(ctx context.Context, p AcceptWagerParams) (solana.S
 
 func (c *Client) CloseMatch(ctx context.Context, keeperKey solana.PrivateKey, matchID string) (solana.Signature, error) {
 	matchBytes := []byte(matchID)
+	ixData, err := EncodeCloseMatchData(matchBytes)
+	if err != nil {
+		return solana.Signature{}, err
+	}
+	state, exists, err := c.GetMatchState(ctx, matchID)
+	if err != nil {
+		return solana.Signature{}, err
+	}
+	if exists && state.IsClosed {
+		return solana.Signature{}, ErrMatchAlreadyClosed
+	}
+
 	configPDA, _, err := FindConfigPDA(c.programID)
 	if err != nil {
 		return solana.Signature{}, err
 	}
 	matchStatePDA, _, err := FindMatchStatePDA(c.programID, matchBytes)
-	if err != nil {
-		return solana.Signature{}, err
-	}
-	ixData, err := EncodeCloseMatchData(matchBytes)
 	if err != nil {
 		return solana.Signature{}, err
 	}

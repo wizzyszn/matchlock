@@ -9,6 +9,7 @@ import { ClusterBadge } from "@/components/wallet/ClusterBadge";
 import { useSessionQuery } from "@/hooks/queries/use-session";
 import { cn } from "@/lib/utils";
 import { buttonVariants } from "@/components/ui/button";
+import { UserBalance } from "@/components/wallet/user-balance";
 
 const NAV_ITEMS = [
   { to: "/markets", label: "Markets" },
@@ -68,13 +69,16 @@ export function AppShell({ children }: AppShellProps) {
               
             </div>
           </div>
-          <UserAccountMenu />
+          <div className="flex items-center gap-2">
+            <UserBalance />
+            <UserAccountMenu />
+          </div>
         </div>
 
         <div className="mx-auto flex max-w-5xl flex-col gap-3 px-4 pb-3 sm:hidden">
           <div className="flex gap-2">
             <ClusterBadge />
-     
+            <UserBalance />
           </div>
         </div>
 

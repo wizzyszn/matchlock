@@ -8,6 +8,7 @@ export type MatchLabels = {
   league: string
   kickoff?: string
   isLive: boolean
+  isStatusStale: boolean
   scoreLine?: string
 }
 
@@ -25,6 +26,7 @@ const LIVE_STATES = new Set([
   'ht',
   'ht2',
   'htet',
+  'extratime',
   'penalties',
   'i',
   'i2',
@@ -50,11 +52,11 @@ const FINAL_STATES = new Set([
   'a',
   'a1',
   'a2',
-  'extratime',
   'aet',
 ])
 
 const UPCOMING_GRACE_MS = 5 * 60 * 1000
+const MAX_LIVE_STATUS_AGE_MS = 4 * 60 * 60 * 1000
 
 const STATUS_SHORT_MAP: Record<string, string> = {
   scheduled: '—',
@@ -142,8 +144,16 @@ export function isMatchFinished(match: Match): boolean {
   return false
 }
 
+export function isMatchStatusStale(match: Match, now = Date.now()): boolean {
+  if (match.is_final) return false
+  if (match.status_stale) return true
+  const kickoff = kickoffMs(match)
+  return kickoff > 0 && now - kickoff >= MAX_LIVE_STATUS_AGE_MS
+}
+
 export function classifyMatch(match: Match, now = Date.now()): MatchFilter {
   if (isMatchFinished(match)) return 'finished'
+  if (isMatchStatusStale(match, now)) return 'finished'
 
   const status = normalizedStatus(match)
   const scores = matchScores(match)
@@ -223,6 +233,7 @@ export function matchLabels(match: Match): MatchLabels {
     league,
     kickoff,
     isLive: classifyMatch(match) === 'live',
+    isStatusStale: isMatchStatusStale(match),
     scoreLine,
   }
 }
@@ -246,6 +257,7 @@ export function formatKickoffClock(match: Match): string {
 
 export function formatStatusShort(match: Match): string {
   const status = normalizedStatus(match)
+  if (isMatchStatusStale(match)) return 'PEND'
   if (isMatchFinished(match)) {
     if (status === 'extratime' || status === 'fet' || status === 'aet') return 'AET'
     if (status === 'fpe' || status === 'penalties') return 'PEN'
@@ -264,12 +276,13 @@ export function formatStatusShort(match: Match): string {
 
 export function formatMatchStatus(match: Match): string {
   const status = normalizedStatus(match)
+  if (isMatchStatusStale(match)) return 'Result pending'
   if (isMatchFinished(match)) {
     if (status === 'extratime' || status === 'fet' || status === 'aet') return 'Final AET'
     if (status === 'fpe' || status === 'penalties') return 'Final PEN'
     return 'Final'
   }
-  
+
   if ((status === 'scheduled' || status === 'ns' || status === 'ns2') && hasKickoffPassed(match)) {
     return classifyMatch(match) === 'live' ? 'Live' : 'Scheduled'
   }

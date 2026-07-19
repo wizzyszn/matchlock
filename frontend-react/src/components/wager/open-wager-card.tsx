@@ -22,6 +22,7 @@ export interface OpenWagerCardProps {
   match?: Match
   onAccept?: (takerSide: Side) => void
   disabled?: boolean
+  accepted?: boolean
   className?: string
 }
 
@@ -30,6 +31,7 @@ export function OpenWagerCard({
   match,
   onAccept,
   disabled = false,
+  accepted = false,
   className,
 }: OpenWagerCardProps) {
   const labels = match ? matchLabels(match) : null
@@ -54,7 +56,7 @@ export function OpenWagerCard({
     : wager.maker_side
 
   return (
-    <Card className={cn('overflow-hidden', className)}>
+    <Card className={cn('overflow-hidden', accepted && 'opacity-50 pointer-events-none', className)}>
       <CardContent className="space-y-3 px-4 pt-4 pb-0">
         <div className="flex items-center justify-between gap-2">
           <div className="flex min-w-0 items-center gap-2 text-xs text-muted-foreground">
@@ -68,6 +70,13 @@ export function OpenWagerCard({
                     aria-hidden
                   />
                   Live
+                </span>
+              </>
+            ) : labels?.isStatusStale ? (
+              <>
+                <span aria-hidden>·</span>
+                <span className="inline-flex shrink-0 items-center gap-1 font-medium text-muted-foreground">
+                  Result pending
                 </span>
               </>
             ) : null}
@@ -118,10 +127,10 @@ export function OpenWagerCard({
       <CardFooter className="border-t px-4 py-3">
         <Button
           className="min-h-10 w-full"
-          disabled={disabled}
+          disabled={disabled || accepted || Boolean(labels?.isStatusStale)}
           onClick={() => onAccept?.(takerSide)}
         >
-          Accept challenge
+          {accepted ? 'Accepted' : 'Accept challenge'}
         </Button>
       </CardFooter>
     </Card>

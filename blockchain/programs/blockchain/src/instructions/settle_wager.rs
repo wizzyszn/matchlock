@@ -11,9 +11,9 @@ use crate::{
     state::*,
 };
 
-const TXLINE_STAT_DRAW: u32 = 1001;
-const TXLINE_STAT_P1_WIN: u32 = 1002;
-const TXLINE_STAT_P2_WIN: u32 = 1003;
+pub(crate) const TXLINE_STAT_DRAW: u32 = 1001;
+pub(crate) const TXLINE_STAT_P1_WIN: u32 = 1002;
+pub(crate) const TXLINE_STAT_P2_WIN: u32 = 1003;
 
 #[derive(Accounts)]
 pub struct SettleWager<'info> {
@@ -172,7 +172,7 @@ pub fn handle_settle_wager(
     Ok(())
 }
 
-fn validate_settlement_proof(
+pub(crate) fn validate_settlement_proof(
     wager: &Wager,
     validation: &ValidateStatArgs,
     winning_side: Side,
@@ -207,7 +207,10 @@ fn validate_settlement_proof(
     Ok(())
 }
 
-fn stat_key_for_winning_side(winning_side: Side, participant1_is_home: bool) -> Result<u32> {
+pub(crate) fn stat_key_for_winning_side(
+    winning_side: Side,
+    participant1_is_home: bool,
+) -> Result<u32> {
     match winning_side {
         Side::Draw => Ok(TXLINE_STAT_DRAW),
         Side::Home => {
@@ -228,7 +231,7 @@ fn stat_key_for_winning_side(winning_side: Side, participant1_is_home: bool) -> 
     }
 }
 
-fn wager_fixture_id(wager: &Wager) -> Result<i64> {
+pub(crate) fn wager_fixture_id(wager: &Wager) -> Result<i64> {
     let mut out = 0i64;
     for byte in wager.match_id_bytes() {
         require!(byte.is_ascii_digit(), ErrorCode::InvalidMatchId);

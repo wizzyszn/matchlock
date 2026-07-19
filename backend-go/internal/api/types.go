@@ -19,6 +19,7 @@ type MatchView struct {
 	Seq         int32      `json:"seq"`
 	UpdatedAt   time.Time  `json:"updated_at"`
 	FinalizedAt *time.Time `json:"finalized_at,omitempty"`
+	StatusStale bool       `json:"status_stale"`
 
 	StartTime          int64          `json:"start_time,omitempty"`
 	CompetitionID      int32          `json:"competition_id,omitempty"`
@@ -96,6 +97,7 @@ func matchViewFromCache(m cache.Match) MatchView {
 		Seq:                m.Seq,
 		UpdatedAt:          m.UpdatedAt,
 		FinalizedAt:        m.FinalizedAt,
+		StatusStale:        cache.LiveStatusExpired(m, time.Now().UTC()),
 		StartTime:          m.StartTime,
 		CompetitionID:      m.CompetitionID,
 		Competition:        m.Competition,

@@ -28,7 +28,12 @@ export function isWinner(
 }
 
 export function isSettlementClaimable(state: SettlementState | undefined): boolean {
-  return state === 'queued' || state === 'retrying' || state === 'failed'
+  return (
+    state === 'claimable' ||
+    state === 'queued' ||
+    state === 'retrying' ||
+    state === 'failed'
+  )
 }
 
 export function canClaimWinnings(

@@ -8,6 +8,7 @@ pub mod register_wallet;
 pub mod settle_wager;
 pub mod unregister_wallet;
 pub mod update_config;
+pub mod void_wager;
 
 pub use accept_wager::*;
 pub use cancel_wager::*;
@@ -19,3 +20,4 @@ pub use register_wallet::*;
 pub use settle_wager::*;
 pub use unregister_wallet::*;
 pub use update_config::*;
+pub use void_wager::*;

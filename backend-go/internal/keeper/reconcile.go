@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"strconv"
 	"strings"
 	"time"
 
@@ -59,20 +60,67 @@ func (r *ReconcileWorker) reconcileOnce(ctx context.Context, batch int) {
 	}
 }
 
-// ReconcileFinalMatches scans cached final fixtures and settles any remaining matched wagers.
+// ReconcileFinalMatches verifies overdue fixtures, closes wagering, and settles
+// any remaining matched wagers.
 func (w *Worker) ReconcileFinalMatches(ctx context.Context) error {
 	matches, err := w.Cache.ListMatches(ctx)
 	if err != nil {
 		return fmt.Errorf("list matches: %w", err)
 	}
 
+	candidates := make(map[string]cache.Match, len(matches))
 	for _, match := range matches {
-		if !match.IsFinal && !cache.FinalVerificationEligible(match, time.Now().UTC()) {
+		candidates[match.MatchID] = match
+	}
+
+	// Redis and fixture schedules are projections, not durable settlement sources.
+	// Rebuild missing match candidates from on-chain active wagers after cache loss
+	// or when an old fixture has fallen out of the schedule snapshot window. Open
+	// wagers are included so a finished fixture is closed before a late acceptance.
+	if w.Solana != nil && w.Txline != nil {
+		wagers, listErr := w.Solana.ListActiveWagers(ctx)
+		if listErr != nil {
+			slog.Warn("reconcile active wagers scan failed", "err", listErr)
+		} else {
+			for _, wager := range wagers {
+				matchID := strings.TrimSpace(wager.MatchIDString())
+				if matchID == "" {
+					continue
+				}
+				if _, ok := candidates[matchID]; ok {
+					continue
+				}
+				match, hydrateErr := w.HydrateMatchFromSnapshot(ctx, matchID)
+				if hydrateErr != nil {
+					slog.Debug("reconcile match hydrate failed",
+						"match_id", matchID,
+						"wager", wager.Pubkey.String(),
+						"err", hydrateErr,
+					)
+					continue
+				}
+				candidates[matchID] = match
+			}
+		}
+	}
+
+	now := time.Now().UTC()
+	for _, match := range candidates {
+		if !match.IsFinal && !cache.FinalVerificationEligible(match, now) {
 			continue
 		}
 		_, update, err := w.RefreshVerifiedFinal(ctx, match)
 		if err != nil {
-			slog.Debug("skip reconcile match", "match_id", match.MatchID, "err", err)
+			if cache.LiveStatusExpired(match, now) {
+				slog.Warn("match final verification overdue",
+					"match_id", match.MatchID,
+					"fixture_id", match.FixtureID,
+					"start_time", match.StartTime,
+					"err", err,
+				)
+			} else {
+				slog.Debug("skip reconcile match", "match_id", match.MatchID, "err", err)
+			}
 			continue
 		}
 		if err := w.closeMatchOnChain(ctx, update.MatchID()); err != nil {
@@ -85,6 +133,52 @@ func (w *Worker) ReconcileFinalMatches(ctx context.Context) error {
 		}
 	}
 	return nil
+}
+
+// HydrateMatchFromSnapshot rebuilds a match projection directly from TxLINE.
+// It is used by startup reconciliation and API read-repair after Redis loss.
+func (w *Worker) HydrateMatchFromSnapshot(ctx context.Context, matchID string) (cache.Match, error) {
+	if w.Cache == nil || w.Txline == nil {
+		return cache.Match{}, fmt.Errorf("match hydration dependencies unavailable")
+	}
+
+	fixtureID, err := strconv.ParseInt(strings.TrimSpace(matchID), 10, 64)
+	if err != nil {
+		return cache.Match{}, fmt.Errorf("parse fixture id %q: %w", matchID, err)
+	}
+	if fixtureID <= 0 {
+		return cache.Match{}, fmt.Errorf("fixture id must be positive: %q", matchID)
+	}
+
+	existing, err := w.Cache.GetMatch(ctx, matchID)
+	if err != nil && !isCacheMiss(err) {
+		return cache.Match{}, fmt.Errorf("load cached match %s: %w", matchID, err)
+	}
+
+	rows, err := w.Txline.FetchScoreSnapshot(ctx, fixtureID)
+	if err != nil {
+		return cache.Match{}, fmt.Errorf("fetch score snapshot for fixture %d: %w", fixtureID, err)
+	}
+	row, err := latestSettlementSnapshot(rows)
+	if err != nil {
+		return cache.Match{}, fmt.Errorf("latest score snapshot for fixture %d: %w", fixtureID, err)
+	}
+	update, err := row.ToScoreUpdate()
+	if err != nil {
+		return cache.Match{}, fmt.Errorf("map score snapshot for fixture %d: %w", fixtureID, err)
+	}
+	if update.FixtureID != fixtureID {
+		return cache.Match{}, fmt.Errorf("snapshot fixture mismatch: got %d want %d", update.FixtureID, fixtureID)
+	}
+
+	match := cache.ApplyScoreUpdate(existing, update)
+	if err := w.Cache.UpsertMatch(ctx, match); err != nil {
+		return cache.Match{}, fmt.Errorf("upsert hydrated match %s: %w", matchID, err)
+	}
+	if err := w.Cache.PublishMatchUpdate(ctx, match); err != nil {
+		slog.Debug("publish hydrated match failed", "match_id", matchID, "err", err)
+	}
+	return match, nil
 }
 
 // RefreshVerifiedFinal upgrades a cached final match to a TxLINE-verified final

@@ -14,6 +14,8 @@ type OptimisticWagersStore = {
   wagers: Record<string, OptimisticEntry>
   upsert: (wager: Wager) => void
   markCancelled: (wager: Wager) => void
+  markAccepted: (wager: Wager) => void
+  markClaimed: (wager: Wager) => void
   remove: (pubkey: string) => void
   reconcile: (serverWagers: Wager[]) => void
   pruneExpired: () => void
@@ -21,6 +23,7 @@ type OptimisticWagersStore = {
 
 const CREATE_TTL_MS = 120_000
 const CANCEL_VISIBILITY_MS = 3_000
+const ACCEPT_VISIBILITY_MS = 5_000
 const CANCEL_SUPPRESSION_MS = 120_000
 
 export const useOptimisticWagersStore = create<OptimisticWagersStore>((set) => ({
@@ -47,6 +50,40 @@ export const useOptimisticWagersStore = create<OptimisticWagersStore>((set) => (
             wager: { ...(existing?.wager ?? wager), ...wager, status: 'cancelled' },
             createdAt: existing?.createdAt ?? now,
             visibleUntil: now + CANCEL_VISIBILITY_MS,
+            expiresAt: now + CANCEL_SUPPRESSION_MS,
+            hidden: false,
+          },
+        },
+      }
+    }),
+  markAccepted: (wager) =>
+    set((state) => {
+      const existing = state.wagers[wager.pubkey]
+      const now = Date.now()
+      return {
+        wagers: {
+          ...state.wagers,
+          [wager.pubkey]: {
+            wager: { ...(existing?.wager ?? wager), ...wager, status: 'matched' },
+            createdAt: existing?.createdAt ?? now,
+            visibleUntil: now + ACCEPT_VISIBILITY_MS,
+            expiresAt: now + CANCEL_SUPPRESSION_MS,
+            hidden: false,
+          },
+        },
+      }
+    }),
+  markClaimed: (wager) =>
+    set((state) => {
+      const existing = state.wagers[wager.pubkey]
+      const now = Date.now()
+      return {
+        wagers: {
+          ...state.wagers,
+          [wager.pubkey]: {
+            wager: { ...(existing?.wager ?? wager), ...wager, status: 'settled' },
+            createdAt: existing?.createdAt ?? now,
+            visibleUntil: now + ACCEPT_VISIBILITY_MS,
             expiresAt: now + CANCEL_SUPPRESSION_MS,
             hidden: false,
           },

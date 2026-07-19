@@ -129,7 +129,8 @@ function ChallengeSlipBody({
   const stakeValid = Number.isFinite(stakeUsdt) && stakeUsdt > 0
   const balanceUsdt = baseUnitsToUsdt(balance)
   const insufficientBalance = stakeValid && stakeUsdt > balanceUsdt
-  const canChallenge = classifyMatch(match) === 'upcoming' || classifyMatch(match) === 'live'
+  const matchPhase = classifyMatch(match)
+  const canChallenge = matchPhase === 'upcoming' || matchPhase === 'live'
   const friendEmailNormalized = friendEmail.trim().toLowerCase()
   const isSelfChallenge =
     Boolean(session) &&
@@ -257,7 +258,7 @@ function ChallengeSlipBody({
 
       {!canChallenge ? (
         <p className="rounded-md border border-dashed bg-muted/40 px-3 py-3 text-sm text-muted-foreground text-center">
-          This fixture is finished — pick an upcoming or live match.
+          This fixture is no longer available for wagering. Pick an upcoming or live match.
         </p>
       ) : (
         <form onSubmit={handleSubmit(openConfirm)} noValidate className="space-y-6">
@@ -520,7 +521,10 @@ export function ChallengeSlipPage({
   const { data: matches, isLoading } = useMatchesQuery()
 
   const openMatches = useMemo(
-    () => (matches ?? []).filter((match) => classifyMatch(match) !== 'finished'),
+    () => (matches ?? []).filter((match) => {
+      const phase = classifyMatch(match)
+      return phase !== 'finished' && phase !== 'pending'
+    }),
     [matches],
   )
 

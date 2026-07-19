@@ -44,3 +44,20 @@ func TestInferFinalStateWithoutGoals(t *testing.T) {
 		t.Fatal("expected verification eligible even without goals")
 	}
 }
+
+func TestLiveStatusExpired(t *testing.T) {
+	kickoff := int64(1782950400000)
+	match := Match{StartTime: kickoff}
+
+	if LiveStatusExpired(match, time.UnixMilli(kickoff).Add(3*time.Hour)) {
+		t.Fatal("three-hour fixture should not be marked stale")
+	}
+	if !LiveStatusExpired(match, time.UnixMilli(kickoff).Add(4*time.Hour)) {
+		t.Fatal("four-hour fixture should be marked stale")
+	}
+
+	match.IsFinal = true
+	if LiveStatusExpired(match, time.UnixMilli(kickoff).Add(24*time.Hour)) {
+		t.Fatal("final fixture should never be marked stale")
+	}
+}

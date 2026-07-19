@@ -52,8 +52,9 @@ export function useWagerMutations() {
 
   const assertMatchOpenForWagering = async (matchId: string) => {
     const match = await api.getMatch(matchId);
-    if (classifyMatch(match) === "finished") {
-      throw new Error("This fixture is already finished. Wagering is closed.");
+    const phase = classifyMatch(match);
+    if (phase === "finished") {
+      throw new Error("This fixture is no longer available for wagering.");
     }
     return match;
   };
@@ -194,7 +195,14 @@ export function useWagerMutations() {
       await simulateTransaction(connection, wallet, tx);
       return sendTransaction(connection, wallet, tx);
     },
-    onSuccess: invalidateWagers,
+    onSuccess: (_data, input) => {
+      const cachedWager = getCachedWager(input.wagerPubkey);
+      if (cachedWager) {
+        optimisticWagers.markAccepted(cachedWager);
+        updateWagerStatus(input.wagerPubkey, "matched");
+      }
+      invalidateWagers();
+    },
   });
 
   const cancelWager = useMutation({
@@ -294,6 +302,10 @@ export function useWagerMutations() {
       return { signature, wagerPubkey: input.wagerPubkey };
     },
     onSuccess: (data) => {
+      const cachedWager = getCachedWager(data.wagerPubkey);
+      if (cachedWager) {
+        optimisticWagers.markClaimed(cachedWager);
+      }
       updateWagerStatus(data.wagerPubkey, "settled");
       queryClient.setQueryData<WagerSettlementStatus>(
         queryKeys.wagers.settlement(data.wagerPubkey),

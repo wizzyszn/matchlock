@@ -16,6 +16,8 @@ import (
 const (
 	settlementStateMatchLive            = "match_live"
 	settlementStateMatchEndedUnverified = "match_ended_unverified"
+	settlementStateClaimable            = "claimable"
+	settlementStateRefundable           = "refundable"
 	settlementStateQueued               = "queued"
 	settlementStateRetrying             = "retrying"
 	settlementStateSettled              = "settled"
@@ -54,7 +56,7 @@ func resolveWagerSettlement(
 
 	match, matchErr := store.GetMatch(ctx, matchID)
 	if matchErr != nil {
-		return cache.WagerSettlementView{State: settlementStateQueued}
+		return cache.WagerSettlementView{State: settlementStateMatchLive}
 	}
 
 	view := cache.WagerSettlementView{
@@ -63,7 +65,11 @@ func resolveWagerSettlement(
 	}
 
 	if !match.IsFinal {
-		view.State = settlementStateMatchLive
+		if cache.LiveStatusExpired(match, time.Now().UTC()) {
+			view.State = settlementStateMatchEndedUnverified
+		} else {
+			view.State = settlementStateMatchLive
+		}
 		return view
 	}
 	if match.FinalSource != cache.FinalSourceTxline {
@@ -88,7 +94,15 @@ func resolveWagerSettlement(
 	}
 
 	if view.State == "" {
-		view.State = settlementStateQueued
+		if winningSide, ok := winningSideFromMatch(match); ok {
+			if _, err := wager.WinnerPubkey(winningSide); err != nil {
+				view.State = settlementStateRefundable
+			} else {
+				view.State = settlementStateClaimable
+			}
+		} else {
+			view.State = settlementStateMatchEndedUnverified
+		}
 	}
 	return view
 }
@@ -115,12 +129,18 @@ func settlementUserMessage(state string) string {
 		return "The match is still in progress. We'll settle your wager once the final result is confirmed."
 	case settlementStateMatchEndedUnverified:
 		return "The match has ended. We're confirming the official final score before paying out."
-	case settlementStateQueued, settlementStateRetrying:
-		return "The final result is verified. Settlement is ready or already being processed on-chain."
+	case settlementStateClaimable:
+		return "The final result is verified. The winner can claim the payout now."
+	case settlementStateRefundable:
+		return "Neither selected outcome won. Both participants are entitled to a full stake refund."
+	case settlementStateQueued:
+		return "The final result is verified. Settlement is queued for on-chain processing."
+	case settlementStateRetrying:
+		return "The final result is verified. Settlement is being retried on-chain."
 	case settlementStateFailed:
 		return "Settlement is taking longer than usual. Our system is still working on it."
 	case settlementStateSettled:
-		return "Your wager has been settled and winnings were sent to the winner's wallet."
+		return "The wager was resolved on-chain and escrow funds were released."
 	default:
 		return ""
 	}
@@ -130,9 +150,19 @@ func (h *handler) refreshVerifiedFinalForWager(ctx context.Context, wager chains
 	if h.txlineData == nil || h.cache == nil {
 		return
 	}
-	match, err := h.cache.GetMatch(ctx, wager.MatchIDString())
+
+	matchID := wager.MatchIDString()
+	match, err := h.cache.GetMatch(ctx, matchID)
 	if err != nil {
-		return
+		worker := &keeper.Worker{Cache: h.cache, Txline: h.txlineData}
+		match, err = worker.HydrateMatchFromSnapshot(ctx, matchID)
+		if err != nil {
+			slog.Debug("settlement match hydrate failed",
+				"match_id", matchID,
+				"err", err,
+			)
+			return
+		}
 	}
 	if match.IsFinal && match.FinalSource == cache.FinalSourceTxline {
 		return

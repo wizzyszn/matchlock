@@ -19,7 +19,7 @@ const (
 	MainnetTxlineOrigin  = "https://txline.txodds.com"
 	DevnetStablecoinMint = "ELWTKspHKCnCfCiCiqYw1EDH77k8VCP74dK9qytG2Ujh"
 	DevnetTxlineProgram  = "6pW64gN1s2uqjHkn1unFeEjAwJkPGHoppGvS715wyP2J"
-	DefaultProgramID     = "7jbdwJLrePo6dr6Jo5sSmK4RQC5tYRrGebnkMFTuPGq5"
+	DefaultProgramID     = "B39Vk22T2VPpqBEbGkW51BzFC6sNeeiQQ1mqwdvCJ2H4"
 )
 
 // Config holds validated runtime settings for the keeper service.
@@ -95,7 +95,7 @@ func loadFromViper(v *viper.Viper) (Config, error) {
 		HTTPWriteTimeout:        durationValue(v, "HTTP_WRITE_TIMEOUT", 15*time.Second),
 		SSEInitialDelay:         durationValue(v, "SSE_INITIAL_BACKOFF", time.Second),
 		SSEMaxDelay:             durationValue(v, "SSE_MAX_BACKOFF", 30*time.Second),
-		ScheduleRefreshInterval: durationValue(v, "SCHEDULE_REFRESH_INTERVAL", 15*time.Minute),
+		ScheduleRefreshInterval: durationValue(v, "SCHEDULE_REFRESH_INTERVAL", 1*time.Minute),
 		OddsRefreshInterval:     durationValue(v, "ODDS_REFRESH_INTERVAL", 60*time.Second),
 		ReconcileInterval:       durationValue(v, "RECONCILE_INTERVAL", 2*time.Minute),
 		SettlementRetryBase:     durationValue(v, "SETTLEMENT_RETRY_BASE", 30*time.Second),
@@ -145,7 +145,7 @@ func newViper() *viper.Viper {
 		"HTTP_WRITE_TIMEOUT":        "15s",
 		"SSE_INITIAL_BACKOFF":       "1s",
 		"SSE_MAX_BACKOFF":           "30s",
-		"SCHEDULE_REFRESH_INTERVAL": "15m",
+		"SCHEDULE_REFRESH_INTERVAL": "1m",
 		"ODDS_REFRESH_INTERVAL":     "60s",
 		"RECONCILE_INTERVAL":        "2m",
 		"SETTLEMENT_RETRY_BASE":     "30s",

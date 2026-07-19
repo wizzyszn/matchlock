@@ -22,10 +22,12 @@ type TxlineClient interface {
 
 // SolanaClient lists wagers and submits settlement transactions.
 type SolanaClient interface {
+	ListActiveWagers(ctx context.Context) ([]chainsol.Wager, error)
 	ListMatchedWagers(ctx context.Context, matchID string) ([]chainsol.Wager, error)
 	GetWager(ctx context.Context, pubkey solanago.PublicKey) (chainsol.Wager, error)
 	CloseMatch(ctx context.Context, keeperKey solanago.PrivateKey, matchID string) (solanago.Signature, error)
 	SettleWager(ctx context.Context, p chainsol.SettleParams) (solanago.Signature, error)
+	VoidWager(ctx context.Context, p chainsol.VoidParams) (solanago.Signature, error)
 }
 
 // Worker consumes score events and settles matched wagers when fixtures finalize.
@@ -110,6 +112,19 @@ func (w *Worker) SettleMatch(ctx context.Context, update txline.ScoreUpdate) err
 	}
 
 	for _, wager := range wagers {
+		attemptNow, err := w.schedulePendingSettlement(ctx, update, wager)
+		if err != nil {
+			slog.Error("schedule settlement failed",
+				"match_id", matchID,
+				"wager", wager.Pubkey.String(),
+				"err", err,
+			)
+			continue
+		}
+		if !attemptNow {
+			continue
+		}
+
 		validation, statKey, err := w.fetchDeclaredWinStatValidation(ctx, update.FixtureID, update.Seq, winningSide, wager.Participant1IsHome)
 		if err != nil {
 			slog.Error("fetch settlement proof failed",
@@ -156,6 +171,9 @@ func (w *Worker) closeMatchOnChain(ctx context.Context, matchID string) error {
 	}
 	sig, err := w.Solana.CloseMatch(ctx, w.KeeperKey, matchID)
 	if err != nil {
+		if errors.Is(err, chainsol.ErrMatchAlreadyClosed) {
+			return nil
+		}
 		return err
 	}
 	slog.Info("match closed for wagering on-chain", "match_id", matchID, "tx_sig", sig.String())
@@ -178,13 +196,21 @@ func (w *Worker) settleOne(
 		return nil
 	}
 
-	sig, err := w.Solana.SettleWager(ctx, chainsol.SettleParams{
+	params := chainsol.SettleParams{
 		Settler:     w.KeeperKey,
 		Wager:       wager,
 		Validation:  validation,
 		MerkleRoot:  merkleRoot,
 		WinningSide: winningSide,
-	})
+	}
+	resolution := "payout"
+	var sig solanago.Signature
+	if _, winnerErr := wager.WinnerPubkey(winningSide); winnerErr != nil {
+		resolution = "refund"
+		sig, err = w.Solana.VoidWager(ctx, params)
+	} else {
+		sig, err = w.Solana.SettleWager(ctx, params)
+	}
 	if err != nil {
 		if errors.Is(err, chainsol.ErrAlreadySettled) {
 			_, _ = w.Cache.MarkSettled(ctx, cache.SettlementRecord{
@@ -215,10 +241,14 @@ func (w *Worker) settleOne(
 		"wager_pubkey", wager.Pubkey.String(),
 		"tx_sig", sig.String(),
 		"winning_side", winningSide,
+		"resolution", resolution,
 	)
 
-	if w.Leaderboard != nil {
-		winnerPubkey, _ := wager.WinnerPubkey(winningSide)
+	if w.Leaderboard != nil && resolution == "payout" {
+		winnerPubkey, winnerErr := wager.WinnerPubkey(winningSide)
+		if winnerErr != nil {
+			return winnerErr
+		}
 		loserPubkey := wager.Maker
 		if winnerPubkey.Equals(wager.Maker) && wager.HasCounterparty() {
 			loserPubkey = wager.Taker

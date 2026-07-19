@@ -176,8 +176,8 @@ cd frontend-react && pnpm run build
 
 | Thing | Address |
 |-------|---------|
-| Matchlock program | `7jbdwJLrePo6dr6Jo5sSmK4RQC5tYRrGebnkMFTuPGq5` |
-| Config PDA | `FU8myLVAMXBZfsEE9PbpmRmeqR8R82NR2gYGphqjcqcS` |
+| Matchlock program | `B39Vk22T2VPpqBEbGkW51BzFC6sNeeiQQ1mqwdvCJ2H4` |
+| Config PDA | `GJLWM4UNP445RJvDHMr38N8XcFMwn18cLTDLyAEx7psN` |
 | USDT (TxLINE devnet) | `ELWTKspHKCnCfCiCiqYw1EDH77k8VCP74dK9qytG2Ujh` |
 | TxLINE oracle program | `6pW64gN1s2uqjHkn1unFeEjAwJkPGHoppGvS715wyP2J` |
 

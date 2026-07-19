@@ -5,9 +5,10 @@ import { Button } from '@/components/ui/button'
 import { Dialog } from '@/components/ui/dialog'
 import type { TxFeeEstimate } from '@/hooks/use-tx-fee-estimate'
 import { clusterLabel } from '@/lib/config'
-import { explorerTxUrl, formatSol, formatUsdt, truncateAddress } from '@/lib/format'
+import { baseUnitsToUsdt, explorerTxUrl, formatSol, formatUsdt, truncateAddress } from '@/lib/format'
 import { useConfig } from '@/hooks/use-api'
 import { useStablecoinLabel } from '@/hooks/use-stablecoin-label'
+import { useTokenBalanceQuery } from '@/hooks/queries/use-token-balance'
 
 export type ConfirmTxDetails = {
   action: 'make' | 'accept' | 'cancel' | 'claim'
@@ -49,6 +50,7 @@ export function ConfirmTxDialog({
 }: ConfirmTxDialogProps) {
   const config = useConfig()
   const stablecoin = useStablecoinLabel()
+  const { data: balance = BigInt(0) } = useTokenBalanceQuery()
 
   if (!details) return null
 
@@ -89,6 +91,14 @@ export function ConfirmTxDialog({
             <img src={usdtLogo} alt="USDT" className="inline-block size-4 -mt-px" /> {formatUsdt(details.stakeUsdt)} {stablecoin}
           </dd>
         </div>
+        {details.action === 'accept' ? (
+          <div className="flex justify-between gap-4">
+            <dt className="text-muted-foreground">Your balance</dt>
+            <dd className="tabular-nums font-medium">
+              <img src={usdtLogo} alt="USDT" className="inline-block size-4 -mt-px" /> {formatUsdt(baseUnitsToUsdt(balance))} {stablecoin}
+            </dd>
+          </div>
+        ) : null}
         <div className="flex justify-between gap-4">
           <dt className="text-muted-foreground">
             {details.action === 'cancel'

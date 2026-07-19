@@ -42,4 +42,6 @@ pub enum ErrorCode {
     ContractPaused,
     #[msg("This match is closed for wagering")]
     MatchClosed,
+    #[msg("Void outcome must differ from both selected wager outcomes")]
+    InvalidVoidOutcome,
 }

@@ -195,6 +195,22 @@ func (c *Client) ListMatchedWagers(ctx context.Context, matchID string) ([]Wager
 	return c.ListWagers(ctx, WagerFilter{Status: &status, MatchID: matchID})
 }
 
+// ListActiveWagers returns all wagers that can still affect fixture closure or
+// settlement. Settled and cancelled accounts are excluded.
+func (c *Client) ListActiveWagers(ctx context.Context) ([]Wager, error) {
+	wagers, err := c.ListWagers(ctx, WagerFilter{})
+	if err != nil {
+		return nil, err
+	}
+	active := make([]Wager, 0, len(wagers))
+	for _, wager := range wagers {
+		if wager.Status == WagerStatusOpen || wager.Status == WagerStatusMatched {
+			active = append(active, wager)
+		}
+	}
+	return active, nil
+}
+
 type SettleParams struct {
 	Settler     solana.PrivateKey
 	Wager       Wager
@@ -202,6 +218,8 @@ type SettleParams struct {
 	MerkleRoot  [32]byte
 	WinningSide uint8
 }
+
+type VoidParams = SettleParams
 
 func (c *Client) SettleWager(ctx context.Context, p SettleParams) (solana.Signature, error) {
 	winner, err := p.Wager.WinnerPubkey(p.WinningSide)
@@ -247,6 +265,63 @@ func (c *Client) SettleWager(ctx context.Context, p SettleParams) (solana.Signat
 		solana.Meta(associatedtokenaccount.ProgramID),
 	}
 
+	return c.submitResolution(ctx, p.Settler, accounts, ixData)
+}
+
+func (c *Client) VoidWager(ctx context.Context, p VoidParams) (solana.Signature, error) {
+	if _, err := p.Wager.WinnerPubkey(p.WinningSide); err == nil {
+		return solana.Signature{}, fmt.Errorf("cannot void wager when selected side won")
+	}
+
+	configPDA, _, err := FindConfigPDA(c.programID)
+	if err != nil {
+		return solana.Signature{}, err
+	}
+	vaultPDA, _, err := FindVaultPDA(c.programID, p.Wager.Pubkey)
+	if err != nil {
+		return solana.Signature{}, err
+	}
+	epochDay := EpochDayFromMillis(p.Validation.TS)
+	dailyScores, _, err := FindDailyScoresRootsPDA(c.txlineProg, epochDay)
+	if err != nil {
+		return solana.Signature{}, err
+	}
+	makerATA, _, err := solana.FindAssociatedTokenAddress(p.Wager.Maker, c.mint)
+	if err != nil {
+		return solana.Signature{}, err
+	}
+	takerATA, _, err := solana.FindAssociatedTokenAddress(p.Wager.Taker, c.mint)
+	if err != nil {
+		return solana.Signature{}, err
+	}
+	ixData, err := EncodeVoidWagerData(p.Validation, p.WinningSide, p.MerkleRoot)
+	if err != nil {
+		return solana.Signature{}, err
+	}
+	accounts := solana.AccountMetaSlice{
+		solana.Meta(p.Settler.PublicKey()).SIGNER().WRITE(),
+		solana.Meta(configPDA),
+		solana.Meta(p.Wager.Pubkey).WRITE(),
+		solana.Meta(vaultPDA).WRITE(),
+		solana.Meta(p.Wager.Maker).WRITE(),
+		solana.Meta(makerATA).WRITE(),
+		solana.Meta(p.Wager.Taker).WRITE(),
+		solana.Meta(takerATA).WRITE(),
+		solana.Meta(c.mint),
+		solana.Meta(dailyScores),
+		solana.Meta(c.txlineProg),
+		solana.Meta(token.ProgramID),
+		solana.Meta(associatedtokenaccount.ProgramID),
+	}
+	return c.submitResolution(ctx, p.Settler, accounts, ixData)
+}
+
+func (c *Client) submitResolution(
+	ctx context.Context,
+	settler solana.PrivateKey,
+	accounts solana.AccountMetaSlice,
+	ixData []byte,
+) (solana.Signature, error) {
 	ix := solana.NewInstruction(c.programID, accounts, ixData)
 	latest, err := c.rpc.GetLatestBlockhash(ctx, rpc.CommitmentFinalized)
 	if err != nil {
@@ -256,15 +331,15 @@ func (c *Client) SettleWager(ctx context.Context, p SettleParams) (solana.Signat
 	tx, err := solana.NewTransaction(
 		[]solana.Instruction{setComputeUnitLimit(1_400_000), ix},
 		latest.Value.Blockhash,
-		solana.TransactionPayer(p.Settler.PublicKey()),
+		solana.TransactionPayer(settler.PublicKey()),
 	)
 	if err != nil {
 		return solana.Signature{}, err
 	}
 
 	_, err = tx.Sign(func(key solana.PublicKey) *solana.PrivateKey {
-		if key.Equals(p.Settler.PublicKey()) {
-			k := p.Settler
+		if key.Equals(settler.PublicKey()) {
+			k := settler
 			return &k
 		}
 		return nil
@@ -326,7 +401,10 @@ func waitForSignature(ctx context.Context, client *rpc.Client, sig solana.Signat
 	}
 }
 
-var ErrAlreadySettled = fmt.Errorf("wager already settled")
+var (
+	ErrAlreadySettled     = fmt.Errorf("wager already settled")
+	ErrMatchAlreadyClosed = fmt.Errorf("match already closed")
+)
 
 func isIdempotentSettleError(err interface{}) bool {
 	s := fmt.Sprint(err)

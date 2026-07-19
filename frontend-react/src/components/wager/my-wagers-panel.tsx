@@ -239,6 +239,7 @@ export function MyWagersPanel() {
             match={matchMap.get(wager.match_id)}
             walletAddress={walletAddress}
             claimPending={claimWager.isPending}
+            claimed={optimisticEntries[wager.pubkey]?.wager.status === 'settled'}
             onSelect={() => navigate(`/my-wagers/${wager.pubkey}`)}
             onClaim={openClaim}
             onCancel={openCancel}
@@ -266,6 +267,7 @@ type MyWagerListItemProps = {
   match?: Match
   walletAddress: string
   claimPending: boolean
+  claimed: boolean
   onSelect: () => void
   onClaim: (
     wagerPubkey: string,
@@ -281,6 +283,7 @@ function MyWagerListItem({
   match,
   walletAddress,
   claimPending,
+  claimed,
   onSelect,
   onClaim,
   onCancel,
@@ -302,6 +305,7 @@ function MyWagerListItem({
         walletAddress={walletAddress}
         claimable={claimable}
         claimPending={claimPending}
+        claimed={claimed}
         onSelect={onSelect}
         onClaim={() =>
           onClaim(

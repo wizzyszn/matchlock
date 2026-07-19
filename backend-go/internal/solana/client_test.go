@@ -13,7 +13,7 @@ import (
 )
 
 const (
-	testProgramID = "7jbdwJLrePo6dr6Jo5sSmK4RQC5tYRrGebnkMFTuPGq5"
+	testProgramID = "B39Vk22T2VPpqBEbGkW51BzFC6sNeeiQQ1mqwdvCJ2H4"
 	testMint      = "ELWTKspHKCnCfCiCiqYw1EDH77k8VCP74dK9qytG2Ujh"
 	testTxlineID  = "6pW64gN1s2uqjHkn1unFeEjAwJkPGHoppGvS715wyP2J"
 )
@@ -160,6 +160,49 @@ func TestListWagers(t *testing.T) {
 	}
 }
 
+func TestListActiveWagersFiltersTerminalStatuses(t *testing.T) {
+	mock := newMockRPC()
+	defer mock.Close()
+
+	statuses := []uint8{WagerStatusOpen, WagerStatusMatched, WagerStatusSettled, WagerStatusCancelled}
+	accounts := make([]map[string]any, 0, len(statuses))
+	for _, status := range statuses {
+		accounts = append(accounts, map[string]any{
+			"pubkey": solana.NewWallet().PublicKey().String(),
+			"account": map[string]any{
+				"data":       encodeAccountData(buildWagerAccountData(t, "18237038", status, 1)),
+				"executable": false,
+				"lamports":   1,
+				"owner":      testProgramID,
+				"rentEpoch":  0,
+			},
+		})
+	}
+	calls := 0
+	mock.getProgramAccounts = func() json.RawMessage {
+		calls++
+		if calls > 1 {
+			return json.RawMessage(`[]`)
+		}
+		payload, _ := json.Marshal(accounts)
+		return payload
+	}
+
+	client := testClient(t, mock)
+	active, err := client.ListActiveWagers(context.Background())
+	if err != nil {
+		t.Fatalf("ListActiveWagers: %v", err)
+	}
+	if len(active) != 2 {
+		t.Fatalf("active wagers = %#v", active)
+	}
+	for _, wager := range active {
+		if wager.Status != WagerStatusOpen && wager.Status != WagerStatusMatched {
+			t.Fatalf("unexpected active status = %d", wager.Status)
+		}
+	}
+}
+
 func TestSettleWagerSuccess(t *testing.T) {
 	mock := newMockRPC()
 	defer mock.Close()
@@ -249,5 +292,58 @@ func TestSettleWagerWinnerError(t *testing.T) {
 	})
 	if err == nil {
 		t.Fatal("expected winner error")
+	}
+}
+
+func TestVoidWagerSuccess(t *testing.T) {
+	mock := newMockRPC()
+	defer mock.Close()
+	client := testClient(t, mock)
+
+	keeper := solana.NewWallet()
+	wager := Wager{
+		Pubkey:     solana.NewWallet().PublicKey(),
+		Maker:      solana.NewWallet().PublicKey(),
+		Taker:      solana.NewWallet().PublicKey(),
+		MatchIDLen: 8,
+		MakerSide:  SideHome,
+		TakerSide:  SideDraw,
+		Status:     WagerStatusMatched,
+	}
+	copy(wager.MatchID[:], []byte("18241006"))
+
+	sig, err := client.VoidWager(context.Background(), VoidParams{
+		Settler:     keeper.PrivateKey,
+		Wager:       wager,
+		Validation:  ValidateStatArgs{TS: 1784150064772},
+		WinningSide: SideAway,
+	})
+	if err != nil {
+		t.Fatalf("VoidWager: %v", err)
+	}
+	if sig.String() == "" {
+		t.Fatal("expected signature")
+	}
+}
+
+func TestVoidWagerRejectsSelectedOutcome(t *testing.T) {
+	mock := newMockRPC()
+	defer mock.Close()
+	client := testClient(t, mock)
+	wager := Wager{
+		Pubkey:    solana.NewWallet().PublicKey(),
+		Maker:     solana.NewWallet().PublicKey(),
+		Taker:     solana.NewWallet().PublicKey(),
+		MakerSide: SideHome,
+		TakerSide: SideDraw,
+	}
+	_, err := client.VoidWager(context.Background(), VoidParams{
+		Settler:     solana.NewWallet().PrivateKey,
+		Wager:       wager,
+		Validation:  ValidateStatArgs{TS: 1},
+		WinningSide: SideHome,
+	})
+	if err == nil {
+		t.Fatal("expected selected outcome to be rejected")
 	}
 }

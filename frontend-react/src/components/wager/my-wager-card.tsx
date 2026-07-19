@@ -1,4 +1,4 @@
-import { Clock, Swords, User } from 'lucide-react'
+import { CheckCircle, Clock, Swords, User } from 'lucide-react'
 
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardFooter } from '@/components/ui/card'
@@ -22,6 +22,7 @@ export type MyWagerCardProps = {
   onClaim?: () => void
   claimable?: boolean
   claimPending?: boolean
+  claimed?: boolean
   className?: string
 }
 
@@ -44,6 +45,7 @@ export function MyWagerCard({
   onClaim,
   claimable = false,
   claimPending = false,
+  claimed = false,
   className,
 }: MyWagerCardProps) {
   const labels = match ? matchLabels(match) : null
@@ -67,7 +69,7 @@ export function MyWagerCard({
 
   return (
     <Card
-      className={cn('overflow-hidden', onSelect && 'cursor-pointer transition-colors hover:bg-muted/20', className)}
+      className={cn('overflow-hidden', claimed && 'opacity-50 pointer-events-none', onSelect && 'cursor-pointer transition-colors hover:bg-muted/20', className)}
       onClick={onSelect}
     >
       <CardContent className="space-y-3 px-4 py-4">
@@ -94,6 +96,13 @@ export function MyWagerCard({
                       aria-hidden
                     />
                     Live
+                  </span>
+                </>
+              ) : labels.isStatusStale ? (
+                <>
+                  <span aria-hidden>·</span>
+                  <span className="inline-flex shrink-0 items-center gap-1 font-medium text-muted-foreground">
+                    Result pending
                   </span>
                 </>
               ) : null}
@@ -150,9 +159,17 @@ export function MyWagerCard({
         ) : null}
       </CardContent>
 
-      {canCancel || claimable ? (
+      {canCancel || claimable || claimed ? (
         <CardFooter className="border-t px-4 py-3">
-          {claimable ? (
+          {claimed ? (
+            <Button
+              className="min-h-10 w-full"
+              disabled
+            >
+              <CheckCircle className="mr-1.5 size-4 shrink-0 text-green-600" aria-hidden />
+              <span className="text-green-600">Claimed</span>
+            </Button>
+          ) : claimable ? (
             <Button
               className="min-h-10 w-full"
               disabled={claimPending}

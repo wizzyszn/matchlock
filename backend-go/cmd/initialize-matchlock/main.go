@@ -15,7 +15,7 @@ import (
 
 const (
 	defaultRPC            = "https://api.devnet.solana.com"
-	defaultProgramID      = "7jbdwJLrePo6dr6Jo5sSmK4RQC5tYRrGebnkMFTuPGq5"
+	defaultProgramID      = "B39Vk22T2VPpqBEbGkW51BzFC6sNeeiQQ1mqwdvCJ2H4"
 	defaultStablecoinMint = "ELWTKspHKCnCfCiCiqYw1EDH77k8VCP74dK9qytG2Ujh"
 	defaultTxlineProgram  = "6pW64gN1s2uqjHkn1unFeEjAwJkPGHoppGvS715wyP2J"
 )

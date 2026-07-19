@@ -140,18 +140,18 @@ const MemoMatchRow = memo(function MatchRow({
           <span
             className={cn(
               'text-lg font-semibold leading-none',
-              scores.hasScore ? 'text-foreground' : 'text-muted-foreground/50',
+              scores.hasScore ? 'text-foreground' : isLive ? 'text-foreground' : 'text-muted-foreground/50',
             )}
           >
-            {scores.hasScore ? scores.home : '—'}
+            {scores.hasScore ? scores.home : isLive ? '0' : '—'}
           </span>
           <span
             className={cn(
               'text-lg font-semibold leading-none',
-              scores.hasScore ? 'text-foreground' : 'text-muted-foreground/50',
+              scores.hasScore ? 'text-foreground' : isLive ? 'text-foreground' : 'text-muted-foreground/50',
             )}
           >
-            {scores.hasScore ? scores.away : '—'}
+            {scores.hasScore ? scores.away : isLive ? '0' : '—'}
           </span>
         </div>
       </td>
@@ -261,13 +261,13 @@ const MemoMatchCard = memo(function MatchCard({
               <TeamRow name={labels.homeTeam} flagSize="sm" />
               <TeamRow name={labels.awayTeam} flagSize="sm" />
             </div>
-            {scores.hasScore ? (
+            {scores.hasScore || isLive ? (
               <div className="flex flex-col items-center gap-1 tabular-nums">
                 <span className="text-lg font-semibold leading-none text-foreground">
-                  {scores.home}
+                  {scores.hasScore ? scores.home : '0'}
                 </span>
                 <span className="text-lg font-semibold leading-none text-foreground">
-                  {scores.away}
+                  {scores.hasScore ? scores.away : '0'}
                 </span>
               </div>
             ) : null}

@@ -36,9 +36,17 @@ const STATE_COPY: Record<
     title: 'Confirming final score',
     detail: 'Payout starts as soon as the official result is verified.',
   }),
-  queued: () => ({
-    title: 'Ready to settle',
+  claimable: () => ({
+    title: 'Ready to claim',
     detail: 'The final result is verified. The winner can claim the payout.',
+  }),
+  refundable: () => ({
+    title: 'Refund due',
+    detail: 'Neither selected outcome won. Both stakes will be returned.',
+  }),
+  queued: () => ({
+    title: 'Settlement queued',
+    detail: 'The keeper has scheduled the payout for on-chain processing.',
   }),
   retrying: () => ({
     title: 'Settlement in progress',
@@ -49,8 +57,8 @@ const STATE_COPY: Record<
     detail: "This is taking a bit longer than usual — we're still working on it.",
   }),
   settled: () => ({
-    title: 'Paid out',
-    detail: "Winnings have been sent to the winner's wallet.",
+    title: 'Resolved',
+    detail: 'Escrow funds have been released on-chain.',
   }),
 }
 
@@ -72,7 +80,7 @@ export function SettlementStatus({
   lastSignature,
 }: SettlementStatusProps) {
   const config = useConfig()
-  const { data: status, isLoading, isError } = useWagerSettlementQuery(wagerPubkey)
+  let { data: status, isLoading, isError } = useWagerSettlementQuery(wagerPubkey)
   const preMatch = useMemo(() => matchNotStarted(match), [match])
 
   if (isLoading) {

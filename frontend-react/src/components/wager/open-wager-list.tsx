@@ -14,6 +14,7 @@ import { useWagersQuery } from "@/hooks/queries/use-wagers";
 import { useWagerMutations } from "@/hooks/mutations/use-wager-mutations";
 import { useTxFeeEstimate } from "@/hooks/use-tx-fee-estimate";
 import { useWagerTxBuilders } from "@/hooks/use-wager-tx-builders";
+import { useOptimisticWagersStore } from "@/stores/optimistic-wagers-store";
 import type { Match, Side } from "@/lib/api";
 import { baseUnitsToUsdt } from "@/lib/format";
 import { classifyMatch, matchLabels } from "@/lib/match-display";
@@ -55,6 +56,8 @@ export function OpenWagerList() {
   const [txError, setTxError] = useState<string | null>(null);
   const [signature, setSignature] = useState<string | null>(null);
 
+  const optimisticWagers = useOptimisticWagersStore((state) => state.wagers);
+
   const matchMap = useMemo(() => {
     const map = new Map<string, Match>();
     matches?.forEach((m) => map.set(m.match_id, m));
@@ -62,16 +65,32 @@ export function OpenWagerList() {
   }, [matches]);
 
   const filteredWagers = useMemo(() => {
-    return (wagers ?? []).filter((wager) => {
+    const serverWagers = wagers ?? []
+    const now = Date.now()
+
+    const merged = new Map(serverWagers.map((w) => [w.pubkey, w]))
+
+    for (const [pubkey, entry] of Object.entries(optimisticWagers)) {
+      if (entry.hidden) continue
+      if (entry.wager.status !== 'matched') continue
+      if (entry.visibleUntil && entry.visibleUntil <= now) continue
+      if (walletAddress && entry.wager.maker === walletAddress) continue
+      merged.set(pubkey, entry.wager)
+    }
+
+    return Array.from(merged.values()).filter((wager) => {
       if (walletAddress && wager.maker === walletAddress) return false;
 
       const match = matchMap.get(wager.match_id);
-      if (match && classifyMatch(match) === "finished") return false;
+      if (match) {
+        const phase = classifyMatch(match);
+        if (phase === "finished" || phase === "pending") return false;
+      }
       if (filter === "open") return wager.status === "open";
       if (filter === "live") return match ? matchLabels(match).isLive : false;
       return true;
     });
-  }, [wagers, walletAddress, matchMap, filter]);
+  }, [wagers, walletAddress, matchMap, filter, optimisticWagers]);
 
   const openAccept = (wagerPubkey: string, maker: string, takerSide: Side) => {
     const wager = wagers?.find((w) => w.pubkey === wagerPubkey);
@@ -123,7 +142,7 @@ export function OpenWagerList() {
   return (
     <section aria-labelledby="open-wagers-heading">
       <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
-        <PageHeader className="mb-8 sm:mb-0">
+        <PageHeader className=" sm:mb-0">
           <PageHeaderHeading id="open-wagers-heading">Open challenges</PageHeaderHeading>
           <PageHeaderDescription>
             Head-to-head wagers waiting for a taker. Pick your outcome and match
@@ -192,7 +211,7 @@ export function OpenWagerList() {
           </p>
         </div>
       ) : (
-        <ul className="grid list-none gap-3 sm:grid-cols-2 lg:grid-cols-3">
+        <ul className="grid list-none gap-3 sm:grid-cols-2 lg:grid-cols-3 mt-8">
           {filteredWagers.map((wager) => {
             const match = matchMap.get(wager.match_id);
             return (
@@ -200,10 +219,13 @@ export function OpenWagerList() {
                 <OpenWagerCard
                   wager={wager}
                   match={match}
+                  accepted={optimisticWagers[wager.pubkey]?.wager.status === 'matched'}
                   disabled={
                     !walletAddress ||
                     acceptWager.isPending ||
-                    (match ? classifyMatch(match) === "finished" : false)
+                    (match
+                      ? ["finished", "pending"].includes(classifyMatch(match))
+                      : false)
                   }
                   onAccept={(takerSide) =>
                     openAccept(wager.pubkey, wager.maker, takerSide)

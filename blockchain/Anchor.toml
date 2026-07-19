@@ -11,10 +11,10 @@ resolution = true
 skip-lint = false
 
 [programs.localnet]
-blockchain = "7jbdwJLrePo6dr6Jo5sSmK4RQC5tYRrGebnkMFTuPGq5"
+blockchain = "B39Vk22T2VPpqBEbGkW51BzFC6sNeeiQQ1mqwdvCJ2H4"
 
 [programs.devnet]
-blockchain = "7jbdwJLrePo6dr6Jo5sSmK4RQC5tYRrGebnkMFTuPGq5"
+blockchain = "B39Vk22T2VPpqBEbGkW51BzFC6sNeeiQQ1mqwdvCJ2H4"
 
 [provider]
 cluster = "devnet"

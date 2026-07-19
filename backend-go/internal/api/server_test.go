@@ -588,8 +588,8 @@ func TestGetWagerSettlementRefreshesVerifiedFinal(t *testing.T) {
 	if err := json.Unmarshal(rec.Body.Bytes(), &body); err != nil {
 		t.Fatalf("decode: %v", err)
 	}
-	if body.State != settlementStateQueued {
-		t.Fatalf("state = %q, want %q body=%s", body.State, settlementStateQueued, rec.Body.String())
+	if body.State != settlementStateClaimable {
+		t.Fatalf("state = %q, want %q body=%s", body.State, settlementStateClaimable, rec.Body.String())
 	}
 	got, err := cacheStore.GetMatch(context.Background(), "17952170")
 	if err != nil {
@@ -597,6 +597,110 @@ func TestGetWagerSettlementRefreshesVerifiedFinal(t *testing.T) {
 	}
 	if got.FinalSource != cache.FinalSourceTxline || got.Seq != 42 {
 		t.Fatalf("refreshed match = %#v", got)
+	}
+}
+
+func TestGetWagerSettlementHydratesFinalAfterCacheLoss(t *testing.T) {
+	pubkey := solana.NewWallet().PublicKey()
+	wager := chainsol.Wager{
+		Pubkey:     pubkey,
+		Maker:      solana.NewWallet().PublicKey(),
+		Taker:      solana.NewWallet().PublicKey(),
+		MatchIDLen: 8,
+		MakerSide:  chainsol.SideHome,
+		TakerSide:  chainsol.SideAway,
+		Stake:      1_000_000,
+		Status:     chainsol.WagerStatusMatched,
+	}
+	copy(wager.MatchID[:], []byte("18237038"))
+
+	cacheStore := &fakeCache{matches: map[string]cache.Match{}}
+	h := &handler{
+		cache:  cacheStore,
+		wagers: &fakeWagers{wagers: []chainsol.Wager{wager}},
+		redis:  fakeProbe{},
+		rpc:    fakeProbe{},
+		txline: fakeProbe{},
+		txlineData: settlementSnapshotTxline{rows: []txline.ScoreSnapshotRow{{
+			FixtureIDAlt:     18237038,
+			GameStateAlt:     "scheduled",
+			ActionAlt:        "game_finalised",
+			StatusIDAlt:      json.RawMessage("100"),
+			SeqAlt:           1026,
+			Participant1Home: true,
+			Score: &txline.SnapshotScore{
+				Participant1: txline.SoccerTotalScore{Total: &txline.SoccerScore{Goals: 0}},
+				Participant2: txline.SoccerTotalScore{Total: &txline.SoccerScore{Goals: 2}},
+			},
+		}}},
+	}
+	handler := corsMiddleware([]string{"http://localhost:5173"})(newMux(h))
+
+	req := httptest.NewRequest(http.MethodGet, "/wagers/"+pubkey.String()+"/settlement", nil)
+	rec := httptest.NewRecorder()
+	handler.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d body=%s", rec.Code, rec.Body.String())
+	}
+	var body SettlementStatusView
+	if err := json.Unmarshal(rec.Body.Bytes(), &body); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	if body.State != settlementStateClaimable {
+		t.Fatalf("state = %q, want %q body=%s", body.State, settlementStateClaimable, rec.Body.String())
+	}
+	got, err := cacheStore.GetMatch(context.Background(), "18237038")
+	if err != nil {
+		t.Fatalf("GetMatch: %v", err)
+	}
+	if !got.IsFinal || got.FinalSource != cache.FinalSourceTxline || got.Seq != 1026 {
+		t.Fatalf("hydrated match = %#v", got)
+	}
+}
+
+func TestGetWagerSettlementMarksUnselectedOutcomeRefundable(t *testing.T) {
+	pubkey := solana.NewWallet().PublicKey()
+	wager := chainsol.Wager{
+		Pubkey:     pubkey,
+		Maker:      solana.NewWallet().PublicKey(),
+		Taker:      solana.NewWallet().PublicKey(),
+		MatchIDLen: 8,
+		MakerSide:  chainsol.SideHome,
+		TakerSide:  chainsol.SideDraw,
+		Stake:      1_000_000,
+		Status:     chainsol.WagerStatusMatched,
+	}
+	copy(wager.MatchID[:], []byte("18241006"))
+	home, away := int32(1), int32(2)
+	cacheStore := &fakeCache{matches: map[string]cache.Match{
+		"18241006": {
+			MatchID:     "18241006",
+			FixtureID:   18241006,
+			GameState:   "FT",
+			IsFinal:     true,
+			FinalSource: cache.FinalSourceTxline,
+			HomeGoals:   &home,
+			AwayGoals:   &away,
+			Seq:         962,
+			UpdatedAt:   time.Now().UTC(),
+		},
+	}}
+	handler := newTestHandler(t, cacheStore, &fakeWagers{wagers: []chainsol.Wager{wager}})
+
+	req := httptest.NewRequest(http.MethodGet, "/wagers/"+pubkey.String()+"/settlement", nil)
+	rec := httptest.NewRecorder()
+	handler.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d body=%s", rec.Code, rec.Body.String())
+	}
+	var body SettlementStatusView
+	if err := json.Unmarshal(rec.Body.Bytes(), &body); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	if body.State != settlementStateRefundable {
+		t.Fatalf("state = %q, want %q body=%s", body.State, settlementStateRefundable, rec.Body.String())
 	}
 }
 
@@ -662,6 +766,47 @@ func TestGetWagerSettlementKeepsEligibleLiveMatchLive(t *testing.T) {
 	}
 	if got.IsFinal {
 		t.Fatalf("live match was incorrectly finalized: %#v", got)
+	}
+}
+
+func TestGetWagerSettlementDoesNotPresentExpiredMatchAsLive(t *testing.T) {
+	pubkey := solana.NewWallet().PublicKey()
+	wager := chainsol.Wager{
+		Pubkey:     pubkey,
+		Maker:      solana.NewWallet().PublicKey(),
+		Taker:      solana.NewWallet().PublicKey(),
+		MatchIDLen: 8,
+		MakerSide:  chainsol.SideHome,
+		TakerSide:  chainsol.SideAway,
+		Stake:      1_000_000,
+		Status:     chainsol.WagerStatusMatched,
+	}
+	copy(wager.MatchID[:], []byte("18237038"))
+	cacheStore := &fakeCache{matches: map[string]cache.Match{
+		"18237038": {
+			MatchID:   "18237038",
+			FixtureID: 18237038,
+			GameState: "live",
+			StartTime: time.Now().Add(-5 * time.Hour).UnixMilli(),
+			Seq:       1026,
+			UpdatedAt: time.Now().UTC(),
+		},
+	}}
+	handler := newTestHandler(t, cacheStore, &fakeWagers{wagers: []chainsol.Wager{wager}})
+
+	req := httptest.NewRequest(http.MethodGet, "/wagers/"+pubkey.String()+"/settlement", nil)
+	rec := httptest.NewRecorder()
+	handler.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d body=%s", rec.Code, rec.Body.String())
+	}
+	var body SettlementStatusView
+	if err := json.Unmarshal(rec.Body.Bytes(), &body); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	if body.State != settlementStateMatchEndedUnverified {
+		t.Fatalf("state = %q, want %q body=%s", body.State, settlementStateMatchEndedUnverified, rec.Body.String())
 	}
 }
 

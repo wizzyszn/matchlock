@@ -84,6 +84,35 @@ func TestReadyzSuccess(t *testing.T) {
 	}
 }
 
+func TestReadyzReportsStaleMatches(t *testing.T) {
+	cacheStore := &fakeCache{matches: map[string]cache.Match{
+		"18237038": {
+			MatchID:   "18237038",
+			FixtureID: 18237038,
+			GameState: "live",
+			StartTime: time.Now().Add(-5 * time.Hour).UnixMilli(),
+		},
+	}}
+	handler := newTestHandler(t, cacheStore, &fakeWagers{})
+	req := httptest.NewRequest(http.MethodGet, "/readyz", nil)
+	rec := httptest.NewRecorder()
+	handler.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d", rec.Code)
+	}
+	var body struct {
+		StaleMatches int               `json:"stale_matches"`
+		Checks       map[string]string `json:"checks"`
+	}
+	if err := json.Unmarshal(rec.Body.Bytes(), &body); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	if body.StaleMatches != 1 || body.Checks["match_freshness"] != "degraded" {
+		t.Fatalf("body = %#v", body)
+	}
+}
+
 func TestGetMatchOK(t *testing.T) {
 	now := time.Now().UTC()
 	cacheStore := &fakeCache{matches: map[string]cache.Match{

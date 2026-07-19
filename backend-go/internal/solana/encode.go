@@ -11,25 +11,25 @@ import (
 )
 
 type ProofNode struct {
-	Hash            [32]byte
-	IsRightSibling  bool
+	Hash           [32]byte
+	IsRightSibling bool
 }
 
 type ValidateStatArgs struct {
-	TS              int64
-	FixtureSummary  ScoresBatchSummary
-	FixtureProof    []ProofNode
-	MainTreeProof   []ProofNode
-	Predicate       TraderPredicate
-	StatA           StatTerm
-	StatB           *StatTerm
-	Op              *uint8
+	TS             int64
+	FixtureSummary ScoresBatchSummary
+	FixtureProof   []ProofNode
+	MainTreeProof  []ProofNode
+	Predicate      TraderPredicate
+	StatA          StatTerm
+	StatB          *StatTerm
+	Op             *uint8
 }
 
 type ScoresBatchSummary struct {
-	FixtureID           int64
-	UpdateStats         ScoresUpdateStats
-	EventsSubTreeRoot   [32]byte
+	FixtureID         int64
+	UpdateStats       ScoresUpdateStats
+	EventsSubTreeRoot [32]byte
 }
 
 type ScoresUpdateStats struct {
@@ -147,17 +147,30 @@ func decodeHex(s string) ([]byte, error) {
 }
 
 var settleWagerDiscriminator = [8]byte{161, 242, 169, 152, 172, 163, 161, 104}
+var voidWagerDiscriminator = anchorDiscriminator("void_wager")
 
 func EncodeSettleWagerData(validation ValidateStatArgs, winningSide uint8, merkleRoot [32]byte) ([]byte, error) {
 	var buf bytes.Buffer
-	if err := encodeSettleWagerPayload(&buf, validation, winningSide, merkleRoot); err != nil {
+	if err := encodeResolutionPayload(&buf, settleWagerDiscriminator, validation, winningSide, merkleRoot); err != nil {
 		return nil, err
 	}
 	return buf.Bytes(), nil
 }
 
 func encodeSettleWagerPayload(buf io.Writer, validation ValidateStatArgs, winningSide uint8, merkleRoot [32]byte) error {
-	if _, err := buf.Write(settleWagerDiscriminator[:]); err != nil {
+	return encodeResolutionPayload(buf, settleWagerDiscriminator, validation, winningSide, merkleRoot)
+}
+
+func EncodeVoidWagerData(validation ValidateStatArgs, winningSide uint8, merkleRoot [32]byte) ([]byte, error) {
+	var buf bytes.Buffer
+	if err := encodeResolutionPayload(&buf, voidWagerDiscriminator, validation, winningSide, merkleRoot); err != nil {
+		return nil, err
+	}
+	return buf.Bytes(), nil
+}
+
+func encodeResolutionPayload(buf io.Writer, discriminator [8]byte, validation ValidateStatArgs, winningSide uint8, merkleRoot [32]byte) error {
+	if _, err := buf.Write(discriminator[:]); err != nil {
 		return err
 	}
 	if err := writeValidateStatArgs(buf, validation); err != nil {

@@ -41,17 +41,25 @@ func (c *Client) FetchScoreSnapshot(ctx context.Context, fixtureID int64) ([]Sco
 
 // ScoreSnapshotRow is one entry from /api/scores/snapshot/{fixtureId}.
 type ScoreSnapshotRow struct {
-	FixtureID          int64  `json:"fixtureId"`
-	FixtureIDAlt       int64  `json:"FixtureId"`
-	GameState          string `json:"gameState"`
-	GameStateAlt       string `json:"GameState"`
-	Seq                int32  `json:"seq"`
-	SeqAlt             int32  `json:"Seq"`
-	Participant1IsHome bool   `json:"participant1IsHome"`
-	Participant1Home   bool   `json:"Participant1IsHome"`
+	FixtureID          int64               `json:"fixtureId"`
+	FixtureIDAlt       int64               `json:"FixtureId"`
+	GameState          string              `json:"gameState"`
+	GameStateAlt       string              `json:"GameState"`
+	StartTime          int64               `json:"startTime"`
+	StartTimeAlt       int64               `json:"StartTime"`
+	Action             string              `json:"action"`
+	ActionAlt          string              `json:"Action"`
+	StatusID           json.RawMessage     `json:"statusId"`
+	StatusIDAlt        json.RawMessage     `json:"StatusId"`
+	TS                 int64               `json:"ts"`
+	TSAlt              int64               `json:"Ts"`
+	Seq                int32               `json:"seq"`
+	SeqAlt             int32               `json:"Seq"`
+	Participant1IsHome bool                `json:"participant1IsHome"`
+	Participant1Home   bool                `json:"Participant1IsHome"`
 	Clock              *SoccerFixtureClock `json:"Clock"`
 	ScoreSoccer        *SoccerFixtureScore `json:"scoreSoccer"`
-	Score              *SnapshotScore `json:"Score"`
+	Score              *SnapshotScore      `json:"Score"`
 }
 
 type SnapshotScore struct {
@@ -80,6 +88,27 @@ func (r ScoreSnapshotRow) Sequence() int32 {
 	return r.SeqAlt
 }
 
+func (r ScoreSnapshotRow) Kickoff() int64 {
+	if r.StartTime != 0 {
+		return r.StartTime
+	}
+	return r.StartTimeAlt
+}
+
+func (r ScoreSnapshotRow) EventTimestamp() int64 {
+	if r.TS != 0 {
+		return r.TS
+	}
+	return r.TSAlt
+}
+
+func (r ScoreSnapshotRow) ActionName() string {
+	if r.Action != "" {
+		return r.Action
+	}
+	return r.ActionAlt
+}
+
 func (r ScoreSnapshotRow) HomeIsP1() bool {
 	return r.Participant1IsHome || r.Participant1Home
 }
@@ -89,6 +118,10 @@ func (r ScoreSnapshotRow) ToScoreUpdate() (ScoreUpdate, error) {
 	update := ScoreUpdate{
 		FixtureID:          r.Fixture(),
 		GameState:          r.State(),
+		StartTime:          r.Kickoff(),
+		Action:             r.ActionName(),
+		StatusID:           r.statusID(),
+		TS:                 r.EventTimestamp(),
 		Seq:                r.Sequence(),
 		Participant1IsHome: r.HomeIsP1(),
 	}
@@ -112,6 +145,10 @@ func (r ScoreSnapshotRow) ToScoreUpdate() (ScoreUpdate, error) {
 }
 
 func (r ScoreSnapshotRow) normalizedState(state string) string {
+	if r.isTerminal() {
+		return "FT"
+	}
+
 	normalized := strings.ToLower(strings.TrimSpace(state))
 	if normalized != "" && normalized != "scheduled" && normalized != "ns" && normalized != "ns2" {
 		return state
@@ -146,6 +183,35 @@ func (r ScoreSnapshotRow) normalizedState(state string) string {
 	}
 
 	return state
+}
+
+func (r ScoreSnapshotRow) statusID() json.RawMessage {
+	if len(r.StatusID) > 0 {
+		return r.StatusID
+	}
+	return r.StatusIDAlt
+}
+
+func (r ScoreSnapshotRow) isTerminal() bool {
+	switch strings.ToLower(strings.TrimSpace(r.ActionName())) {
+	case "game_finalised", "game_finalized", "fixture_finalised", "fixture_finalized",
+		"match_finalised", "match_finalized":
+		return true
+	}
+
+	raw := r.statusID()
+	if len(raw) == 0 {
+		return false
+	}
+	var numeric int64
+	if err := json.Unmarshal(raw, &numeric); err == nil {
+		return numeric == 100
+	}
+	var text string
+	if err := json.Unmarshal(raw, &text); err != nil {
+		return false
+	}
+	return strings.TrimSpace(text) == "100"
 }
 
 func (r ScoreSnapshotRow) score() *SoccerFixtureScore {
@@ -192,9 +258,12 @@ func LatestScoreSnapshot(rows []ScoreSnapshotRow) (ScoreSnapshotRow, error) {
 	return best, nil
 }
 
-// LatestFinalSnapshot picks the last snapshot row in a terminal state with scores.
+// LatestFinalSnapshot picks the highest-sequence terminal row with scores.
 func LatestFinalSnapshot(rows []ScoreSnapshotRow) (ScoreSnapshotRow, error) {
-	for i := len(rows) - 1; i >= 0; i-- {
+	var best ScoreSnapshotRow
+	var bestSeq int32
+	found := false
+	for i := range rows {
 		u, err := rows[i].ToScoreUpdate()
 		if err != nil {
 			continue
@@ -206,8 +275,15 @@ func LatestFinalSnapshot(rows []ScoreSnapshotRow) (ScoreSnapshotRow, error) {
 			if _, ok := u.AwayGoals(); !ok {
 				continue
 			}
-			return rows[i], nil
+			if !found || u.Seq >= bestSeq {
+				best = rows[i]
+				bestSeq = u.Seq
+				found = true
+			}
 		}
+	}
+	if found {
+		return best, nil
 	}
 	return ScoreSnapshotRow{}, fmt.Errorf("no final snapshot row found")
 }

@@ -5,6 +5,7 @@ import (
 	"errors"
 	"net/http"
 	"strings"
+	"time"
 
 	"github.com/gagliardetto/solana-go"
 	"github.com/matchlock/backend-go/internal/auth"
@@ -110,10 +111,28 @@ func (h *handler) readyz(w http.ResponseWriter, r *http.Request) {
 		checks["settlement_queue"] = "ok"
 	}
 
+	staleMatches := 0
+	if matches, err := h.cache.ListMatches(ctx); err != nil {
+		checks["match_freshness"] = err.Error()
+	} else {
+		now := time.Now().UTC()
+		for _, match := range matches {
+			if cache.LiveStatusExpired(match, now) {
+				staleMatches++
+			}
+		}
+		if staleMatches > 0 {
+			checks["match_freshness"] = "degraded"
+		} else {
+			checks["match_freshness"] = "ok"
+		}
+	}
+
 	writeJSON(w, http.StatusOK, map[string]any{
 		"status":              "ready",
 		"checks":              checks,
 		"pending_settlements": pendingSettlements,
+		"stale_matches":       staleMatches,
 	})
 }
 

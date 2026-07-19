@@ -524,6 +524,41 @@ impl TestEnv {
         );
         self.send(&[self.authority.insecure_clone()], &[ix]);
     }
+
+    pub fn void_wager_as_keeper(&mut self, wager: Address, vault: Address, winning_side: Side) {
+        let maker = self.maker.pubkey();
+        let taker = self.taker.pubkey();
+        let maker_ata = get_associated_token_address(&maker, &self.mint);
+        let taker_ata = get_associated_token_address(&taker, &self.mint);
+        let daily_scores = self.setup_daily_scores_account();
+
+        let ix = Instruction::new_with_bytes(
+            blockchain::id(),
+            &blockchain::instruction::VoidWager {
+                validation: self.validation_for_side(winning_side),
+                winning_side,
+                merkle_root: [1u8; 32],
+            }
+            .data(),
+            blockchain::accounts::VoidWager {
+                settler: self.authority.pubkey(),
+                config: self.config,
+                wager,
+                vault,
+                maker,
+                maker_stablecoin: maker_ata,
+                taker,
+                taker_stablecoin: taker_ata,
+                stablecoin_mint: self.mint,
+                daily_scores_merkle_roots: daily_scores,
+                txline_program: TXLINE_MOCK_PROGRAM_ID,
+                token_program: TOKEN_PROGRAM_ID,
+                associated_token_program: ATA_PROGRAM_ID,
+            }
+            .to_account_metas(None),
+        );
+        self.send(&[self.authority.insecure_clone()], &[ix]);
+    }
 }
 
 fn read_deploy_so(name: &str) -> Vec<u8> {

@@ -2,6 +2,7 @@ package keeper
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"testing"
 	"time"
@@ -149,9 +150,25 @@ func (s *snapshotTxline) FetchScoreSnapshot(ctx context.Context, fixtureID int64
 	return s.rows, nil
 }
 
+type queueAwareTxline struct {
+	fakeTxline
+	cache         *memCache
+	matchID       string
+	wagerPubkey   string
+	queuedAtFetch bool
+}
+
+func (q *queueAwareTxline) FetchStatValidation(ctx context.Context, fixtureID int64, seq int32, statKey uint32) (txline.StatValidation, error) {
+	item, err := q.cache.GetPendingSettlement(ctx, q.matchID, q.wagerPubkey)
+	q.queuedAtFetch = err == nil && item.Attempts == 0
+	return q.fakeTxline.FetchStatValidation(ctx, fixtureID, seq, statKey)
+}
+
 type fakeSolana struct {
 	closeCalls      int
+	closeErr        error
 	settleCalls     int
+	voidCalls       int
 	lastWinningSide uint8
 	lastWagerPubkey string
 	settleErr       error
@@ -176,6 +193,28 @@ func (f *fakeSolana) ListMatchedWagers(ctx context.Context, matchID string) ([]s
 	if f.listErr != nil {
 		return nil, f.listErr
 	}
+	wager := f.activeWager(matchID)
+	if wager.Status != solanapkg.WagerStatusMatched {
+		return nil, nil
+	}
+	return []solanapkg.Wager{wager}, nil
+}
+
+func (f *fakeSolana) ListActiveWagers(ctx context.Context) ([]solanapkg.Wager, error) {
+	if f.listErr != nil {
+		return nil, f.listErr
+	}
+	if f.storedWager.Pubkey.IsZero() {
+		return nil, nil
+	}
+	wager := f.activeWager("")
+	if wager.Status != solanapkg.WagerStatusOpen && wager.Status != solanapkg.WagerStatusMatched {
+		return nil, nil
+	}
+	return []solanapkg.Wager{wager}, nil
+}
+
+func (f *fakeSolana) activeWager(matchID string) solanapkg.Wager {
 	var matchBytes [32]byte
 	copy(matchBytes[:], []byte(matchID))
 	if f.storedWager.Pubkey.IsZero() {
@@ -191,7 +230,7 @@ func (f *fakeSolana) ListMatchedWagers(ctx context.Context, matchID string) ([]s
 			Status:             solanapkg.WagerStatusMatched,
 		}
 	}
-	return []solanapkg.Wager{f.storedWager}, nil
+	return f.storedWager
 }
 
 func (f *fakeSolana) SettleWager(ctx context.Context, p solanapkg.SettleParams) (solana.Signature, error) {
@@ -206,11 +245,38 @@ func (f *fakeSolana) SettleWager(ctx context.Context, p solanapkg.SettleParams) 
 	return sig, nil
 }
 
+func (f *fakeSolana) VoidWager(ctx context.Context, p solanapkg.VoidParams) (solana.Signature, error) {
+	f.voidCalls++
+	f.lastWinningSide = p.WinningSide
+	f.lastWagerPubkey = p.Wager.Pubkey.String()
+	if f.settleErr != nil {
+		return solana.Signature{}, f.settleErr
+	}
+	var sig solana.Signature
+	sig[0] = 3
+	return sig, nil
+}
+
 func (f *fakeSolana) CloseMatch(ctx context.Context, keeperKey solana.PrivateKey, matchID string) (solana.Signature, error) {
 	f.closeCalls++
+	if f.closeErr != nil {
+		return solana.Signature{}, f.closeErr
+	}
 	var sig solana.Signature
 	sig[0] = 2
 	return sig, nil
+}
+
+func TestCloseMatchOnChainTreatsAlreadyClosedAsSuccess(t *testing.T) {
+	sc := &fakeSolana{closeErr: solanapkg.ErrMatchAlreadyClosed}
+	w := &Worker{Solana: sc, KeeperKey: solana.NewWallet().PrivateKey}
+
+	if err := w.closeMatchOnChain(context.Background(), "18237038"); err != nil {
+		t.Fatalf("closeMatchOnChain: %v", err)
+	}
+	if sc.closeCalls != 1 {
+		t.Fatalf("close calls = %d, want 1", sc.closeCalls)
+	}
 }
 
 func finalScoreUpdate() txline.ScoreUpdate {
@@ -249,6 +315,71 @@ func TestWorkerSettleMatchIdempotent(t *testing.T) {
 	}
 	if sc.settleCalls != 1 {
 		t.Fatalf("settle calls = %d, want 1", sc.settleCalls)
+	}
+}
+
+func TestSettleMatchQueuesBeforeFetchingProof(t *testing.T) {
+	c := newMemCache()
+	sc := &fakeSolana{}
+	update := finalScoreUpdate()
+	wager := sc.activeWager(update.MatchID())
+	tx := &queueAwareTxline{
+		cache:       c,
+		matchID:     update.MatchID(),
+		wagerPubkey: wager.Pubkey.String(),
+	}
+	w := &Worker{
+		Cache:      c,
+		Txline:     tx,
+		Solana:     sc,
+		KeeperKey:  solana.NewWallet().PrivateKey,
+		StatKey:    1002,
+		AutoSettle: true,
+	}
+
+	if err := w.SettleMatch(context.Background(), update); err != nil {
+		t.Fatalf("SettleMatch: %v", err)
+	}
+	if !tx.queuedAtFetch {
+		t.Fatal("settlement was not durably queued before proof fetch")
+	}
+	if _, err := c.GetPendingSettlement(context.Background(), update.MatchID(), wager.Pubkey.String()); !errors.Is(err, cache.ErrPendingSettlementNotFound) {
+		t.Fatalf("pending settlement remained after success: %v", err)
+	}
+}
+
+func TestSettleMatchLeavesExistingQueueForRetryWorker(t *testing.T) {
+	c := newMemCache()
+	sc := &fakeSolana{}
+	update := finalScoreUpdate()
+	wager := sc.activeWager(update.MatchID())
+	now := time.Now().UTC()
+	c.pending[update.MatchID()+":"+wager.Pubkey.String()] = cache.PendingSettlement{
+		MatchID:     update.MatchID(),
+		WagerPubkey: wager.Pubkey.String(),
+		FixtureID:   update.FixtureID,
+		Seq:         update.Seq,
+		GameState:   update.GameState,
+		Attempts:    2,
+		NextRetryAt: now.Add(time.Minute),
+		CreatedAt:   now.Add(-time.Minute),
+		UpdatedAt:   now,
+	}
+	tx := &fakeTxline{}
+	w := &Worker{
+		Cache:      c,
+		Txline:     tx,
+		Solana:     sc,
+		KeeperKey:  solana.NewWallet().PrivateKey,
+		StatKey:    1002,
+		AutoSettle: true,
+	}
+
+	if err := w.SettleMatch(context.Background(), update); err != nil {
+		t.Fatalf("SettleMatch: %v", err)
+	}
+	if tx.calls != 0 || sc.settleCalls != 0 {
+		t.Fatalf("existing retry was attempted early: proof_calls=%d settle_calls=%d", tx.calls, sc.settleCalls)
 	}
 }
 
@@ -408,6 +539,38 @@ func TestSettleMatchSettlesDrawScore(t *testing.T) {
 	}
 }
 
+func TestSettleOneVoidsWhenNeitherSelectedSideWon(t *testing.T) {
+	c := newMemCache()
+	sc := &fakeSolana{}
+	w := &Worker{
+		Cache:     c,
+		Solana:    sc,
+		KeeperKey: solana.NewWallet().PrivateKey,
+	}
+	wager := solanapkg.Wager{
+		Pubkey:    solana.NewWallet().PublicKey(),
+		Maker:     solana.NewWallet().PublicKey(),
+		Taker:     solana.NewWallet().PublicKey(),
+		MakerSide: solanapkg.SideHome,
+		TakerSide: solanapkg.SideDraw,
+		Status:    solanapkg.WagerStatusMatched,
+	}
+
+	if err := w.settleOne(
+		context.Background(),
+		"18241006",
+		wager,
+		solanapkg.ValidateStatArgs{},
+		[32]byte{},
+		solanapkg.SideAway,
+	); err != nil {
+		t.Fatalf("settleOne: %v", err)
+	}
+	if sc.voidCalls != 1 || sc.settleCalls != 0 {
+		t.Fatalf("void calls = %d settle calls = %d", sc.voidCalls, sc.settleCalls)
+	}
+}
+
 func TestHandleUpdateFinalTriggersSettlement(t *testing.T) {
 	c := newMemCache()
 	tx := &fakeTxline{}
@@ -517,6 +680,121 @@ func TestReconcileRefreshesEligibleNonFinalWithoutAutoSettle(t *testing.T) {
 	}
 }
 
+func TestReconcileHydratesMissingFinalFromMatchedWager(t *testing.T) {
+	const matchID = "18237038"
+	var matchBytes [32]byte
+	copy(matchBytes[:], matchID)
+
+	c := newMemCache()
+	sc := &fakeSolana{storedWager: solanapkg.Wager{
+		Pubkey:             solana.NewWallet().PublicKey(),
+		Maker:              solana.NewWallet().PublicKey(),
+		Taker:              solana.NewWallet().PublicKey(),
+		MatchID:            matchBytes,
+		MatchIDLen:         uint8(len(matchID)),
+		Participant1IsHome: true,
+		MakerSide:          solanapkg.SideHome,
+		TakerSide:          solanapkg.SideAway,
+		Status:             solanapkg.WagerStatusMatched,
+	}}
+	tx := &snapshotTxline{rows: []txline.ScoreSnapshotRow{{
+		FixtureIDAlt:     18237038,
+		GameStateAlt:     "scheduled",
+		StartTimeAlt:     1784055600000,
+		ActionAlt:        "game_finalised",
+		StatusIDAlt:      json.RawMessage("100"),
+		TSAlt:            1784063054751,
+		SeqAlt:           1026,
+		Participant1Home: true,
+		Score: &txline.SnapshotScore{
+			Participant1: txline.SoccerTotalScore{Total: &txline.SoccerScore{Goals: 0}},
+			Participant2: txline.SoccerTotalScore{Total: &txline.SoccerScore{Goals: 2}},
+		},
+	}}}
+	w := &Worker{
+		Cache:      c,
+		Txline:     tx,
+		Solana:     sc,
+		KeeperKey:  solana.NewWallet().PrivateKey,
+		AutoSettle: false,
+	}
+
+	if err := w.ReconcileFinalMatches(context.Background()); err != nil {
+		t.Fatalf("ReconcileFinalMatches: %v", err)
+	}
+	got, err := c.GetMatch(context.Background(), matchID)
+	if err != nil {
+		t.Fatalf("GetMatch: %v", err)
+	}
+	if !got.IsFinal || got.FinalSource != cache.FinalSourceTxline || got.Seq != 1026 {
+		t.Fatalf("hydrated match = %#v", got)
+	}
+	if got.HomeGoals == nil || got.AwayGoals == nil || *got.HomeGoals != 0 || *got.AwayGoals != 2 {
+		t.Fatalf("hydrated score = %#v-%#v", got.HomeGoals, got.AwayGoals)
+	}
+	if sc.closeCalls != 1 {
+		t.Fatalf("close calls = %d, want 1", sc.closeCalls)
+	}
+	if sc.settleCalls != 0 {
+		t.Fatalf("settle calls = %d, want 0", sc.settleCalls)
+	}
+}
+
+func TestReconcileHydratesAndClosesMissingFinalFromOpenWager(t *testing.T) {
+	const matchID = "18237038"
+	var matchBytes [32]byte
+	copy(matchBytes[:], matchID)
+
+	c := newMemCache()
+	sc := &fakeSolana{storedWager: solanapkg.Wager{
+		Pubkey:     solana.NewWallet().PublicKey(),
+		Maker:      solana.NewWallet().PublicKey(),
+		MatchID:    matchBytes,
+		MatchIDLen: uint8(len(matchID)),
+		MakerSide:  solanapkg.SideHome,
+		TakerSide:  solanapkg.SideUnset,
+		Status:     solanapkg.WagerStatusOpen,
+	}}
+	tx := &snapshotTxline{rows: []txline.ScoreSnapshotRow{{
+		FixtureIDAlt:     18237038,
+		GameStateAlt:     "scheduled",
+		StartTimeAlt:     1784055600000,
+		ActionAlt:        "game_finalised",
+		StatusIDAlt:      json.RawMessage("100"),
+		TSAlt:            1784063054751,
+		SeqAlt:           1026,
+		Participant1Home: true,
+		Score: &txline.SnapshotScore{
+			Participant1: txline.SoccerTotalScore{Total: &txline.SoccerScore{Goals: 0}},
+			Participant2: txline.SoccerTotalScore{Total: &txline.SoccerScore{Goals: 2}},
+		},
+	}}}
+	w := &Worker{
+		Cache:      c,
+		Txline:     tx,
+		Solana:     sc,
+		KeeperKey:  solana.NewWallet().PrivateKey,
+		AutoSettle: true,
+	}
+
+	if err := w.ReconcileFinalMatches(context.Background()); err != nil {
+		t.Fatalf("ReconcileFinalMatches: %v", err)
+	}
+	got, err := c.GetMatch(context.Background(), matchID)
+	if err != nil {
+		t.Fatalf("GetMatch: %v", err)
+	}
+	if !got.IsFinal || got.FinalSource != cache.FinalSourceTxline || got.Seq != 1026 {
+		t.Fatalf("hydrated match = %#v", got)
+	}
+	if sc.closeCalls != 1 {
+		t.Fatalf("close calls = %d, want 1", sc.closeCalls)
+	}
+	if sc.settleCalls != 0 {
+		t.Fatalf("settle calls = %d, want 0 for an open wager", sc.settleCalls)
+	}
+}
+
 func TestProcessPendingItemUsesHydratedFinalSeq(t *testing.T) {
 	c := newMemCache()
 	matchID := "17952170"
@@ -606,11 +884,18 @@ func TestSettleMatchErrorBranches(t *testing.T) {
 	}
 
 	sc.settleErr = nil
-	if err := w.SettleMatch(ctx, update); err != nil {
-		t.Fatalf("duplicate final should retry unsettled: %v", err)
+	if err := c.UpsertMatch(ctx, cache.ApplyScoreUpdate(cache.Match{}, update)); err != nil {
+		t.Fatalf("cache final match for retry: %v", err)
+	}
+	pending.NextRetryAt = time.Now().Add(-time.Second)
+	if err := c.UpdatePendingSettlement(ctx, pending); err != nil {
+		t.Fatalf("make pending settlement due: %v", err)
+	}
+	if err := w.ProcessPendingQueue(ctx, 10); err != nil {
+		t.Fatalf("process pending queue: %v", err)
 	}
 	if sc.settleCalls != 2 {
-		t.Fatalf("settle calls = %d, want 2 on retry", sc.settleCalls)
+		t.Fatalf("settle calls = %d, want 2 after queued retry", sc.settleCalls)
 	}
 
 	w2 := &Worker{
